@@ -1,0 +1,65 @@
+<div class="bento-card rounded-xl overflow-x-auto">
+  <table class="w-full data-table">
+    <thead>
+      <tr>
+        <th class="text-left" style="min-width: 160px;">时间</th>
+        <th class="text-left">用户</th>
+        <th class="text-left">邮箱</th>
+        <th class="text-left" style="min-width: 180px;">模型</th>
+        <th class="text-right">输入 Token</th>
+        <th class="text-right">输出 Token</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in records.records %}
+      <tr>
+        <td class="font-mono text-xs text-surface-600">
+          {{ item.createdAt | format_utc8 if item.createdAt else '-' }}
+        </td>
+        <td class="font-medium text-surface-800">
+          {{ item.userInfo.name if item.userInfo else '-' }}
+        </td>
+        <td class="text-surface-500 text-xs">
+          {{ item.userInfo.email if item.userInfo else '-' }}
+        </td>
+        <td class="font-mono text-xs text-surface-600">
+          {{ item.model or '未知' }}
+        </td>
+        <td class="text-right font-mono text-gold-500 text-xs">
+          {{ "{:,}".format(item.promptTokens | default(0)) }}
+        </td>
+        <td class="text-right font-mono text-gold-600 text-xs">
+          {{ "{:,}".format(item.completionTokens | default(0)) }}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not records.records %}
+      <tr><td colspan="6" class="text-center py-8 text-surface-400 font-mono text-sm">暂无数据</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% if records.total_pages > 1 %}
+<div class="flex items-center justify-between mt-4">
+  <p class="text-xs text-surface-500 font-mono">
+    共 {{ records.total }} 条 — 第 {{ records.page }}/{{ records.total_pages }} 页
+  </p>
+  <div class="flex gap-1">
+    {% if records.page > 1 %}
+    <a href="/usage?page={{ records.page - 1 }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-get="/usage/table?page={{ records.page - 1 }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-target="#usage-table-area"
+       hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">上一页</a>
+    {% endif %}
+    {% if records.page < records.total_pages %}
+    <a href="/usage?page={{ records.page + 1 }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-get="/usage/table?page={{ records.page + 1 }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-target="#usage-table-area"
+       hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">下一页</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

@@ -1,0 +1,47 @@
+<div class="max-h-[600px] overflow-y-auto">
+  {% for c in convos.records %}
+  <div class="convo-item px-4 py-3 cursor-pointer hover:bg-gold-400/5 transition border-b border-surface-200/50"
+       onclick="selectConvo('{{ c.conversationId }}', '{{ user_id }}')">
+    <p class="text-sm font-medium text-surface-800 truncate">{{ c.title or '新对话' }}</p>
+    <div class="flex items-center justify-between mt-1.5">
+      <span class="badge badge-default">{{ c.model or c.endpoint or '-' }}</span>
+      <span class="text-[10px] font-mono text-surface-500">{{ c.msg_count }} 条消息</span>
+    </div>
+    <div class="flex items-center justify-between mt-1.5">
+      <span class="text-[10px] font-mono text-surface-500">
+        {% if c.prompt_tokens or c.completion_tokens %}
+        <span class="text-gold-500">{{ "{:,}".format(c.prompt_tokens | default(0)) }}</span>
+        <span class="text-surface-300 mx-0.5">/</span>
+        <span class="text-gold-600">{{ "{:,}".format(c.completion_tokens | default(0)) }}</span>
+        {% else %}
+        <span class="text-surface-400">-</span>
+        {% endif %}
+      </span>
+      <span class="text-[10px] font-mono text-surface-400">{{ c.updatedAt | format_utc8('%m-%d %H:%M') if c.updatedAt else '' }}</span>
+    </div>
+  </div>
+  {% endfor %}
+  {% if not convos.records %}
+  <div class="text-center py-8">
+    <p class="text-xs text-surface-400 font-mono">暂无会话</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if convos.total_pages > 1 %}
+<div class="px-4 py-3 border-t border-surface-200/60 flex items-center justify-between">
+  <p class="text-[10px] text-surface-500 font-mono">共 {{ convos.total }} 个会话</p>
+  <div class="flex gap-1">
+    {% if convos.page > 1 %}
+    <button hx-get="/sessions/conversations?user_id={{ user_id }}&page={{ convos.page - 1 }}"
+            hx-target="#convo-list-area" hx-swap="innerHTML"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">上一页</button>
+    {% endif %}
+    {% if convos.page < convos.total_pages %}
+    <button hx-get="/sessions/conversations?user_id={{ user_id }}&page={{ convos.page + 1 }}"
+            hx-target="#convo-list-area" hx-swap="innerHTML"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">下一页</button>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

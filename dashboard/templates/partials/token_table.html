@@ -1,0 +1,53 @@
+<div class="bento-card rounded-xl overflow-x-auto">
+  <table class="w-full data-table">
+    <thead>
+      <tr>
+        <th class="text-left">用户</th>
+        <th class="text-left">邮箱</th>
+        <th class="text-left">模型</th>
+        <th class="text-right">输入</th>
+        <th class="text-right">输出</th>
+        <th class="text-right">调用数</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in by_user.records %}
+      <tr>
+        <td class="font-medium text-surface-800">{{ item.userInfo.name if item.userInfo else '-' }}</td>
+        <td class="text-surface-500 text-xs">{{ item.userInfo.email if item.userInfo else '-' }}</td>
+        <td class="font-mono text-xs text-surface-600">{{ item._id.model or '未知' }}</td>
+        <td class="text-right font-mono text-gold-500 text-xs">{{ "{:,}".format(item.promptTokens | default(0)) }}</td>
+        <td class="text-right font-mono text-gold-600 text-xs">{{ "{:,}".format(item.completionTokens | default(0)) }}</td>
+        <td class="text-right font-mono text-xs">{{ "{:,}".format(item.count | default(0)) }}</td>
+      </tr>
+      {% endfor %}
+      {% if not by_user.records %}
+      <tr><td colspan="6" class="text-center py-8 text-surface-400 font-mono text-sm">暂无数据</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% if by_user.total_pages > 1 %}
+<div class="flex items-center justify-between mt-4">
+  <p class="text-xs text-surface-500 font-mono">
+    共 {{ by_user.total }} 条 — 第 {{ by_user.page }}/{{ by_user.total_pages }} 页
+  </p>
+  <div class="flex gap-1">
+    {% if by_user.page > 1 %}
+    <a href="/tokens?page={{ by_user.page - 1 }}&start={{ start }}&end={{ end }}"
+       hx-get="/tokens/table?page={{ by_user.page - 1 }}&start={{ start }}&end={{ end }}"
+       hx-target="#token-table-area"
+       hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">上一页</a>
+    {% endif %}
+    {% if by_user.page < by_user.total_pages %}
+    <a href="/tokens?page={{ by_user.page + 1 }}&start={{ start }}&end={{ end }}"
+       hx-get="/tokens/table?page={{ by_user.page + 1 }}&start={{ start }}&end={{ end }}"
+       hx-target="#token-table-area"
+       hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">下一页</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

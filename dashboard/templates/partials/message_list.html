@@ -1,0 +1,49 @@
+<div class="space-y-2 max-h-[600px] overflow-y-auto">
+  {% for msg in messages.records %}
+  <div class="rounded-lg p-3 text-sm
+    {% if msg.isCreatedByUser %}msg-user{% else %}msg-assistant{% endif %}">
+    <div class="flex items-center justify-between mb-1.5">
+      <span class="text-[10px] font-mono font-semibold tracking-wider uppercase
+        {% if msg.isCreatedByUser %}text-gold-600{% else %}text-gold-500{% endif %}">
+        {% if msg.isCreatedByUser %}用户{% else %}{{ (msg.sender or msg.model or '助手') }}{% endif %}
+      </span>
+      <div class="flex items-center gap-2">
+        {% if msg.model %}
+        <span class="badge badge-default">{{ msg.model }}</span>
+        {% endif %}
+        {% if msg.tokenCount %}
+        <span class="text-[10px] font-mono text-surface-500">{{ msg.tokenCount }} tok</span>
+        {% endif %}
+        {% if msg.error %}
+        <span class="badge badge-error">错误</span>
+        {% endif %}
+      </div>
+    </div>
+    <p class="text-surface-700 whitespace-pre-wrap break-words text-[13px] leading-relaxed">{{ (msg.text or msg.content_text or '')[:2000] }}{% if (msg.text or msg.content_text or '')|length > 2000 %}...{% endif %}</p>
+    <p class="text-[10px] font-mono text-surface-400 mt-1.5">{{ msg.createdAt | format_utc8 if msg.createdAt else '' }}</p>
+  </div>
+  {% endfor %}
+  {% if not messages.records %}
+  <div class="text-center py-8">
+    <p class="text-xs text-surface-400 font-mono">此会话暂无消息</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if messages.total_pages > 1 %}
+<div class="flex items-center justify-between mt-4">
+  <p class="text-[10px] text-surface-500 font-mono">共 {{ messages.total }} 条消息</p>
+  <div class="flex gap-1">
+    {% if messages.page > 1 %}
+    <button hx-get="/sessions/messages?conversation_id={{ conversation_id }}&user_id={{ user_id }}&page={{ messages.page - 1 }}"
+            hx-target="#msg-list-area" hx-swap="innerHTML"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">上一页</button>
+    {% endif %}
+    {% if messages.page < messages.total_pages %}
+    <button hx-get="/sessions/messages?conversation_id={{ conversation_id }}&user_id={{ user_id }}&page={{ messages.page + 1 }}"
+            hx-target="#msg-list-area" hx-swap="innerHTML"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">下一页</button>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

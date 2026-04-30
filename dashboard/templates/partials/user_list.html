@@ -1,0 +1,42 @@
+<div class="max-h-[600px] overflow-y-auto">
+  {% for user in user_list.records %}
+  <div class="user-item px-4 py-3 cursor-pointer hover:bg-gold-400/5 transition border-b border-surface-200/50"
+       onclick="selectUser('{{ user._id }}')">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium text-surface-800">{{ user.name or user.username or user.email }}</p>
+        <p class="text-[10px] text-surface-500 font-mono">{{ user.email }}</p>
+      </div>
+      <div class="text-right">
+        <p class="text-[10px] font-mono text-surface-500">{{ user.convo_count }} <span class="text-surface-400">会话</span></p>
+        <p class="text-[10px] font-mono text-surface-400">{{ user.msg_count }} <span class="text-surface-400">消息</span></p>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% if not user_list.records %}
+  <div class="text-center py-8">
+    <p class="text-xs text-surface-400 font-mono">未找到匹配用户</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if user_list.total_pages > 1 %}
+<div class="px-4 py-3 border-t border-surface-200/60 flex items-center justify-between">
+  <p class="text-[10px] text-surface-500 font-mono">共 {{ user_list.total }} 用户</p>
+  <div class="flex gap-1">
+    {% if user_list.page > 1 %}
+    <button hx-get="/sessions/users?search={{ search }}&page={{ user_list.page - 1 }}"
+            hx-target="#user-list-area" hx-swap="innerHTML"
+            hx-include="#user-search"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">上一页</button>
+    {% endif %}
+    {% if user_list.page < user_list.total_pages %}
+    <button hx-get="/sessions/users?search={{ search }}&page={{ user_list.page + 1 }}"
+            hx-target="#user-list-area" hx-swap="innerHTML"
+            hx-include="#user-search"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">下一页</button>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Error - LibreChat Dashboard{% endblock %}
+{% block body %}
+<div class="min-h-screen flex items-center justify-center px-4">
+  <div class="text-center">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-red-50 border border-red-200 mb-6">
+      <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+      </svg>
+    </div>
+    <h1 class="text-lg font-bold text-surface-800 mb-2">{{ title or '错误' }}</h1>
+    <p class="text-sm text-surface-500 mb-6 max-w-md">{{ message or '发生意外错误。' }}</p>
+    <a href="/" class="btn-gold inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-mono">
+      返回控制台
+    </a>
+  </div>
+</div>
+{% endblock %}

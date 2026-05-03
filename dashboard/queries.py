@@ -547,18 +547,91 @@ async def get_conversation_messages(
         .to_list(page_size)
     )
 
-    # Extract text from content array if text field is empty
+    # Extract text from content array if text field is empty,
+    # and collect file/image references for display.
+    file_ids_to_lookup: set[str] = set()
+
     for msg in messages:
+        file_items: list[dict] = []
+
+        # Process content array for text + non-text blocks
         if not msg.get("text") and msg.get("content"):
             content = msg["content"]
             if isinstance(content, list):
                 texts = []
                 for item in content:
-                    if isinstance(item, dict) and item.get("text"):
-                        texts.append(item["text"])
-                    elif isinstance(item, str):
-                        texts.append(item)
+                    if not isinstance(item, dict):
+                        if isinstance(item, str):
+                            texts.append(item)
+                        continue
+                    item_type = item.get("type")
+                    if item_type == "text":
+                        texts.append(item.get("text", ""))
+                    elif item_type == "image_url":
+                        url = item.get("image_url", {}).get("url", "")
+                        if url:
+                            file_items.append({"type": "image", "url": url})
+                    elif item_type == "image_file":
+                        fid = item.get("image_file", {}).get("file_id", "")
+                        if fid:
+                            file_ids_to_lookup.add(fid)
+                            file_items.append({"type": "file_ref", "file_id": fid})
                 msg["content_text"] = "\n".join(texts) if texts else ""
+
+        # Also extract non-text blocks even when text field exists
+        elif msg.get("content") and isinstance(msg["content"], list):
+            for item in msg["content"]:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                if item_type == "image_url":
+                    url = item.get("image_url", {}).get("url", "")
+                    if url:
+                        file_items.append({"type": "image", "url": url})
+                elif item_type == "image_file":
+                    fid = item.get("image_file", {}).get("file_id", "")
+                    if fid:
+                        file_ids_to_lookup.add(fid)
+                        file_items.append({"type": "file_ref", "file_id": fid})
+
+        # Process files array
+        if msg.get("files") and isinstance(msg["files"], list):
+            for f in msg["files"]:
+                if isinstance(f, dict):
+                    fid = f.get("file_id", "")
+                    if fid:
+                        file_ids_to_lookup.add(fid)
+                        file_items.append({"type": "file_ref", "file_id": fid})
+
+        # Process attachments array
+        if msg.get("attachments") and isinstance(msg["attachments"], list):
+            for a in msg["attachments"]:
+                if isinstance(a, dict):
+                    fid = a.get("file_id", "")
+                    fname = a.get("filename", "")
+                    ftype = a.get("type", "")
+                    if fid:
+                        file_ids_to_lookup.add(fid)
+                        file_items.append({"type": "file_ref", "file_id": fid})
+                    elif fname:
+                        file_items.append({"type": "file_ref", "filename": fname, "file_type": ftype})
+
+        msg["file_items"] = file_items
+
+    # Batch lookup file metadata from files collection
+    if file_ids_to_lookup:
+        files_cursor = db.files.find(
+            {"file_id": {"$in": list(file_ids_to_lookup)}},
+            {"file_id": 1, "filename": 1, "type": 1, "width": 1, "height": 1, "bytes": 1},
+        )
+        file_meta: dict[str, dict] = {}
+        async for f in files_cursor:
+            file_meta[f["file_id"]] = f
+        for msg in messages:
+            for item in msg.get("file_items", []):
+                fid = item.get("file_id")
+                if fid and fid in file_meta:
+                    item["meta"] = file_meta[fid]
 
     return {
         "records": messages,
@@ -831,3 +904,112 @@ async def get_usage_records_for_export(
         r["completionTokens"] = int(r.get("completionTokens", 0))
 
     return records
+
+
+# ---------------------------------------------------------------------------
+# File list for file management page
+# ---------------------------------------------------------------------------
+
+async def get_file_by_id(file_id: str) -> dict | None:
+    """Get a single file document by file_id."""
+    db = get_db()
+    return await db.files.find_one({"file_id": file_id}, {"file_id": 1, "filename": 1, "filepath": 1, "source": 1, "type": 1})
+
+
+async def get_file_list(
+    search: str = "",
+    file_type: str = "",
+    user_id: str = "",
+    page: int = 1,
+    page_size: int = 50,
+) -> dict:
+    db = get_db()
+    match_stage: dict = {}
+
+    if search:
+        match_stage["filename"] = {"$regex": search, "$options": "i"}
+
+    if file_type == "image":
+        match_stage["type"] = {"$regex": "^image/", "$options": "i"}
+    elif file_type == "document":
+        match_stage["type"] = {"$not": {"$regex": "^image/", "$options": "i"}}
+
+    if user_id:
+        match_stage["user"] = ObjectId(user_id)
+
+    pipeline: list[dict] = [{"$match": match_stage}]
+
+    pipeline += [
+        {"$lookup": {
+            "from": "users",
+            "let": {"uid": "$user"},
+            "pipeline": [
+                {"$match": {"$expr": {"$eq": ["$_id", "$$uid"]}}},
+                {"$project": {"name": 1, "email": 1, "username": 1}},
+            ],
+            "as": "userInfo",
+        }},
+        {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
+        {"$sort": {"createdAt": -1}},
+    ]
+
+    count_pipeline = pipeline + [{"$count": "total"}]
+    count_result = await db.files.aggregate(count_pipeline).to_list(1)
+    total = count_result[0]["total"] if count_result else 0
+
+    skip = (page - 1) * page_size
+    data_pipeline = pipeline + [{"$skip": skip}, {"$limit": page_size}]
+    items = await db.files.aggregate(data_pipeline).to_list(page_size)
+
+    for item in items:
+        item["bytes"] = int(item.get("bytes", 0))
+
+    return {
+        "records": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+    }
+
+
+async def get_file_stats() -> dict:
+    db = get_db()
+    pipeline = [
+        {"$group": {
+            "_id": None,
+            "total": {"$sum": 1},
+            "totalBytes": {"$sum": {"$ifNull": ["$bytes", 0]}},
+            "imageCount": {
+                "$sum": {"$cond": [{"$regexMatch": {"input": {"$ifNull": ["$type", ""]}, "regex": "^image/"}}, 1, 0]}
+            },
+        }}
+    ]
+    agg = await db.files.aggregate(pipeline).to_list(1)
+    stats = agg[0] if agg else {}
+    return {
+        "total": int(stats.get("total", 0)),
+        "totalBytes": int(stats.get("totalBytes", 0)),
+        "imageCount": int(stats.get("imageCount", 0)),
+        "docCount": int(stats.get("total", 0)) - int(stats.get("imageCount", 0)),
+    }
+
+
+async def get_file_users() -> list[dict]:
+    """Get users who have uploaded files for the filter dropdown."""
+    db = get_db()
+    pipeline = [
+        {"$group": {"_id": "$user"}},
+        {"$lookup": {
+            "from": "users",
+            "let": {"uid": "$_id"},
+            "pipeline": [
+                {"$match": {"$expr": {"$eq": ["$_id", "$$uid"]}}},
+                {"$project": {"name": 1, "email": 1}},
+            ],
+            "as": "userInfo",
+        }},
+        {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
+        {"$sort": {"userInfo.name": 1}},
+    ]
+    return await db.files.aggregate(pipeline).to_list(1000)

@@ -14,6 +14,7 @@ import auth
 import queries
 import export as excel_export
 import db
+import s3helper
 
 _DIR = Path(__file__).resolve().parent
 
@@ -349,6 +350,105 @@ async def messages_partial(
         "conversation_id": conversation_id,
         "user_id": user_id,
     })
+
+
+# ---------------------------------------------------------------------------
+# File management
+# ---------------------------------------------------------------------------
+
+@app.get("/files", response_class=HTMLResponse)
+async def files_page(
+    request: Request,
+    search: str = Query(""),
+    file_type: str = Query(""),
+    user_id: str = Query(""),
+    page: int = Query(1, ge=1),
+):
+    if not _check_auth(request):
+        return RedirectResponse("/login", status_code=302)
+
+    files = await queries.get_file_list(search, file_type, user_id, page)
+    stats = await queries.get_file_stats()
+    users = await queries.get_file_users()
+
+    return templates.TemplateResponse(request=request, name="files.html", context={
+        "files": files,
+        "stats": stats,
+        "users": users,
+        "search": search,
+        "selected_type": file_type,
+        "selected_user": user_id,
+    })
+
+
+@app.get("/files/table", response_class=HTMLResponse)
+async def files_table_partial(
+    request: Request,
+    search: str = Query(""),
+    file_type: str = Query(""),
+    user_id: str = Query(""),
+    page: int = Query(1, ge=1),
+):
+    if not _check_auth(request):
+        return HTMLResponse("Unauthorized", status_code=401)
+
+    files = await queries.get_file_list(search, file_type, user_id, page)
+    return templates.TemplateResponse(request=request, name="partials/file_table.html", context={
+        "files": files,
+        "search": search,
+        "selected_type": file_type,
+        "selected_user": user_id,
+    })
+
+
+@app.get("/files/preview/{file_id}", response_class=HTMLResponse)
+async def file_preview(request: Request, file_id: str):
+    """Redirect to a fresh presigned S3 URL for inline preview."""
+    if not _check_auth(request):
+        return RedirectResponse("/login", status_code=302)
+
+    file_doc = await queries.get_file_by_id(file_id)
+    if not file_doc:
+        return HTMLResponse("File not found", status_code=404)
+
+    filepath = file_doc.get("filepath", "")
+    source = file_doc.get("source", "local")
+
+    if source == "s3" or "s3" in source.lower() or "amazonaws" in filepath:
+        url = s3helper.get_presigned_url(filepath, expires=3600)
+        if url:
+            return RedirectResponse(url, status_code=302)
+
+    # Fallback: try filepath directly (local or other storage)
+    if filepath:
+        return RedirectResponse(filepath, status_code=302)
+
+    return HTMLResponse("File not accessible", status_code=404)
+
+
+@app.get("/files/download/{file_id}", response_class=HTMLResponse)
+async def file_download(request: Request, file_id: str):
+    """Redirect to a fresh presigned S3 URL with download disposition."""
+    if not _check_auth(request):
+        return RedirectResponse("/login", status_code=302)
+
+    file_doc = await queries.get_file_by_id(file_id)
+    if not file_doc:
+        return HTMLResponse("File not found", status_code=404)
+
+    filepath = file_doc.get("filepath", "")
+    filename = file_doc.get("filename", "download")
+    source = file_doc.get("source", "local")
+
+    if source == "s3" or "s3" in source.lower() or "amazonaws" in filepath:
+        url = s3helper.get_presigned_url(filepath, expires=3600, download=True, filename=filename)
+        if url:
+            return RedirectResponse(url, status_code=302)
+
+    if filepath:
+        return RedirectResponse(filepath, status_code=302)
+
+    return HTMLResponse("File not accessible", status_code=404)
 
 
 # ---------------------------------------------------------------------------

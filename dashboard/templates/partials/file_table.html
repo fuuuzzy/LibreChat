@@ -2,38 +2,28 @@
   <table class="w-full data-table">
     <thead>
       <tr>
-        <th class="text-left w-10"></th>
         <th class="text-left">文件名</th>
         <th class="text-left">类型</th>
         <th class="text-right">大小</th>
         <th class="text-left">用户</th>
         <th class="text-left">来源</th>
         <th class="text-left">上传时间</th>
-        <th class="text-center w-16">操作</th>
       </tr>
     </thead>
     <tbody>
       {% for f in files.records %}
       <tr>
         <td>
-          {% if f.type and f.type.startswith('image') %}
-          <div class="w-9 h-9 rounded-md overflow-hidden bg-surface-100 border border-surface-200/60 cursor-pointer hover:ring-2 hover:ring-gold-400/40 transition"
-               onclick="openPreview('{{ f.file_id }}', '{{ f.filename or '' }}')">
-            <img src="/files/preview/{{ f.file_id }}" alt="" class="w-full h-full object-cover" loading="lazy"
-                 onerror="this.parentElement.innerHTML='<svg class=&quot;w-5 h-5 text-surface-300 m-auto&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; viewBox=&quot;0 0 24 24&quot;><path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.5&quot; d=&quot;M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z&quot;/></svg>'">
+          <div class="flex items-center gap-2">
+            {% if f.type and f.type.startswith('image') %}
+            <svg class="w-4 h-4 text-gold-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            {% elif f.type and 'pdf' in f.type %}
+            <svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            {% else %}
+            <svg class="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+            {% endif %}
+            <span class="font-medium text-surface-800 text-xs truncate max-w-[200px]" title="{{ f.filename or '' }}">{{ f.filename or '-' }}</span>
           </div>
-          {% elif f.type and 'pdf' in f.type %}
-          <div class="w-9 h-9 rounded-md bg-red-50 flex items-center justify-center">
-            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-          </div>
-          {% else %}
-          <div class="w-9 h-9 rounded-md bg-surface-50 flex items-center justify-center">
-            <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-          </div>
-          {% endif %}
-        </td>
-        <td>
-          <span class="font-medium text-surface-800 text-xs truncate max-w-[200px] inline-block" title="{{ f.filename or '' }}">{{ f.filename or '-' }}</span>
         </td>
         <td>
           <span class="badge badge-default">{{ f.type or '-' }}</span>
@@ -53,16 +43,10 @@
         </td>
         <td class="font-mono text-[11px] text-surface-500">{{ f.source or 'local' }}</td>
         <td class="text-[11px] font-mono text-surface-400">{{ f.createdAt | format_utc8 if f.createdAt else '-' }}</td>
-        <td class="text-center">
-          <a href="/files/download/{{ f.file_id }}" title="下载"
-             class="inline-flex items-center justify-center w-7 h-7 rounded-md text-surface-400 hover:text-gold-600 hover:bg-gold-400/10 transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-          </a>
-        </td>
       </tr>
       {% endfor %}
       {% if not files.records %}
-      <tr><td colspan="8" class="text-center py-8 text-surface-400 font-mono text-sm">暂无文件</td></tr>
+      <tr><td colspan="6" class="text-center py-8 text-surface-400 font-mono text-sm">暂无文件</td></tr>
       {% endif %}
     </tbody>
   </table>
@@ -91,50 +75,3 @@
   </div>
 </div>
 {% endif %}
-
-<!-- Image Preview Modal -->
-<div id="preview-modal" class="fixed inset-0 z-50 hidden" onclick="closePreview(event)">
-  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
-  <div class="relative flex items-center justify-center min-h-screen p-4">
-    <div class="relative max-w-4xl max-h-[90vh] bg-white rounded-xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
-      <div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-200/60 bg-surface-50">
-        <span id="preview-filename" class="text-sm font-medium text-surface-700 truncate"></span>
-        <div class="flex items-center gap-2 ml-4">
-          <a id="preview-download" href="#" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono text-surface-500 hover:text-gold-600 hover:bg-gold-400/10 transition">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-            下载
-          </a>
-          <button onclick="closePreview()" class="w-7 h-7 flex items-center justify-center rounded-md text-surface-400 hover:text-surface-700 hover:bg-surface-200/60 transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="p-2 flex items-center justify-center bg-surface-100/30">
-        <img id="preview-img" src="" alt="" class="max-h-[80vh] max-w-full object-contain rounded">
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-function openPreview(fileId, filename) {
-  const modal = document.getElementById('preview-modal');
-  const img = document.getElementById('preview-img');
-  const nameEl = document.getElementById('preview-filename');
-  const dlBtn = document.getElementById('preview-download');
-  img.src = '/files/preview/' + fileId;
-  nameEl.textContent = filename;
-  dlBtn.href = '/files/download/' + fileId;
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-}
-function closePreview(e) {
-  if (e && e.target !== e.currentTarget) return;
-  document.getElementById('preview-modal').classList.add('hidden');
-  document.getElementById('preview-img').src = '';
-  document.body.style.overflow = '';
-}
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closePreview();
-});
-</script>

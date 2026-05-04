@@ -14,7 +14,6 @@ import auth
 import queries
 import export as excel_export
 import db
-import s3helper
 
 _DIR = Path(__file__).resolve().parent
 
@@ -399,56 +398,6 @@ async def files_table_partial(
         "selected_type": file_type,
         "selected_user": user_id,
     })
-
-
-@app.get("/files/preview/{file_id}", response_class=HTMLResponse)
-async def file_preview(request: Request, file_id: str):
-    """Redirect to a fresh presigned S3 URL for inline preview."""
-    if not _check_auth(request):
-        return RedirectResponse("/login", status_code=302)
-
-    file_doc = await queries.get_file_by_id(file_id)
-    if not file_doc:
-        return HTMLResponse("File not found", status_code=404)
-
-    filepath = file_doc.get("filepath", "")
-    source = file_doc.get("source", "local")
-
-    if source == "s3" or "s3" in source.lower() or "amazonaws" in filepath:
-        url = s3helper.get_presigned_url(filepath, expires=3600)
-        if url:
-            return RedirectResponse(url, status_code=302)
-
-    # Fallback: try filepath directly (local or other storage)
-    if filepath:
-        return RedirectResponse(filepath, status_code=302)
-
-    return HTMLResponse("File not accessible", status_code=404)
-
-
-@app.get("/files/download/{file_id}", response_class=HTMLResponse)
-async def file_download(request: Request, file_id: str):
-    """Redirect to a fresh presigned S3 URL with download disposition."""
-    if not _check_auth(request):
-        return RedirectResponse("/login", status_code=302)
-
-    file_doc = await queries.get_file_by_id(file_id)
-    if not file_doc:
-        return HTMLResponse("File not found", status_code=404)
-
-    filepath = file_doc.get("filepath", "")
-    filename = file_doc.get("filename", "download")
-    source = file_doc.get("source", "local")
-
-    if source == "s3" or "s3" in source.lower() or "amazonaws" in filepath:
-        url = s3helper.get_presigned_url(filepath, expires=3600, download=True, filename=filename)
-        if url:
-            return RedirectResponse(url, status_code=302)
-
-    if filepath:
-        return RedirectResponse(filepath, status_code=302)
-
-    return HTMLResponse("File not accessible", status_code=404)
 
 
 # ---------------------------------------------------------------------------

@@ -910,12 +910,6 @@ async def get_usage_records_for_export(
 # File list for file management page
 # ---------------------------------------------------------------------------
 
-async def get_file_by_id(file_id: str) -> dict | None:
-    """Get a single file document by file_id."""
-    db = get_db()
-    return await db.files.find_one({"file_id": file_id}, {"file_id": 1, "filename": 1, "filepath": 1, "source": 1, "type": 1})
-
-
 async def get_file_list(
     search: str = "",
     file_type: str = "",

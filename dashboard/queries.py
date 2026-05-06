@@ -221,11 +221,12 @@ async def get_token_by_user(
     if end_date:
         match_stage.setdefault("createdAt", {})["$lte"] = datetime.fromisoformat(end_date)
 
-    pipeline: list[dict] = []
+    base_pipeline: list[dict] = []
     if match_stage:
-        pipeline.append({"$match": match_stage})
+        base_pipeline.append({"$match": match_stage})
 
-    pipeline += [
+    # Group by user+model first
+    base_pipeline += [
         {"$group": {
             "_id": {"user": "$user", "model": "$model"},
             "promptTokens": {
@@ -249,7 +250,6 @@ async def get_token_by_user(
             "messageIds": {"$addToSet": {"$ifNull": ["$messageId", "$_id"]}},
         }},
         {"$addFields": {"count": {"$size": "$messageIds"}}},
-        # Only include records with actual token consumption (non-zero)
         {"$match": {
             "$or": [
                 {"promptTokens": {"$ne": 0}},
@@ -257,33 +257,53 @@ async def get_token_by_user(
             ]
         }},
         {"$project": {"messageIds": 0}},
-        {"$lookup": {
-            "from": "users",
-            "let": {"uid": "$_id.user"},
-            "pipeline": [
-                {"$match": {"$expr": {"$eq": ["$_id", "$$uid"]}}},
-                {"$project": {"name": 1, "email": 1, "username": 1}},
-            ],
-            "as": "userInfo",
+        # Regroup by user, collecting models into array
+        {"$group": {
+            "_id": "$_id.user",
+            "models": {"$push": {
+                "model": "$_id.model",
+                "promptTokens": "$promptTokens",
+                "completionTokens": "$completionTokens",
+                "count": "$count",
+            }},
+            "totalPrompt": {"$sum": "$promptTokens"},
+            "totalCompletion": {"$sum": "$completionTokens"},
+            "totalCount": {"$sum": "$count"},
         }},
-        {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
-        {"$sort": {"count": -1}},
+        {"$sort": {"totalCount": -1}},
     ]
 
-    # Count total for pagination
-    count_pipeline = pipeline + [{"$count": "total"}]
+    # Count distinct users
+    count_pipeline = base_pipeline + [{"$count": "total"}]
     count_result = await db.transactions.aggregate(count_pipeline).to_list(1)
     total = count_result[0]["total"] if count_result else 0
 
-    # Paginate
+    # Paginate users
     skip = (page - 1) * page_size
-    data_pipeline = pipeline + [{"$skip": skip}, {"$limit": page_size}]
+    data_pipeline = base_pipeline + [{"$skip": skip}, {"$limit": page_size}]
     items = await db.transactions.aggregate(data_pipeline).to_list(page_size)
 
-    # Convert floats to ints
+    # Lookup user info
+    user_ids = [item["_id"] for item in items if item.get("_id")]
+    users_cursor = db.users.find(
+        {"_id": {"$in": user_ids}},
+        {"name": 1, "email": 1, "username": 1},
+    )
+    users_map: dict = {}
+    async for u in users_cursor:
+        users_map[u["_id"]] = u
+
     for item in items:
-        item["promptTokens"] = int(item.get("promptTokens", 0))
-        item["completionTokens"] = int(item.get("completionTokens", 0))
+        item["userInfo"] = users_map.get(item["_id"])
+        item["totalPrompt"] = int(item.get("totalPrompt", 0))
+        item["totalCompletion"] = int(item.get("totalCompletion", 0))
+        item["totalCount"] = int(item.get("totalCount", 0))
+        for m in item.get("models", []):
+            m["promptTokens"] = int(m.get("promptTokens", 0))
+            m["completionTokens"] = int(m.get("completionTokens", 0))
+            m["count"] = int(m.get("count", 0))
+        item["models"].sort(key=lambda m: m["promptTokens"] + m["completionTokens"], reverse=True)
+    items.sort(key=lambda x: x["totalPrompt"] + x["totalCompletion"], reverse=True)
 
     return {
         "records": items,
@@ -301,7 +321,7 @@ async def get_token_by_user(
 async def get_token_by_model_detail(
     start_date: str | None = None,
     end_date: str | None = None,
-) -> list[dict]:
+) -> dict:
     db = get_db()
     match_stage: dict = {}
     if start_date:
@@ -315,20 +335,54 @@ async def get_token_by_model_detail(
 
     pipeline += [
         {"$group": {
-            "_id": {"model": "$model", "tokenType": "$tokenType"},
-            "tokenTotal": {"$sum": {"$abs": {"$ifNull": ["$rawAmount", 0]}}},
+            "_id": "$model",
+            "promptTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "prompt"]},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
+                        0
+                    ]
+                }
+            },
+            "completionTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "completion"]},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
+                        0
+                    ]
+                }
+            },
             "messageIds": {"$addToSet": {"$ifNull": ["$messageId", "$_id"]}},
         }},
         {"$addFields": {"count": {"$size": "$messageIds"}}},
-        # Only include models with actual token consumption (non-zero)
-        {"$match": {"tokenTotal": {"$ne": 0}}},
+        {"$match": {
+            "$or": [
+                {"promptTokens": {"$ne": 0}},
+                {"completionTokens": {"$ne": 0}},
+            ]
+        }},
         {"$project": {"messageIds": 0}},
-        {"$sort": {"_id.model": 1, "_id.tokenType": 1}},
     ]
     result = await db.transactions.aggregate(pipeline).to_list(100)
+    grand_prompt = 0
+    grand_completion = 0
+    grand_count = 0
     for r in result:
-        r["tokenTotal"] = int(r.get("tokenTotal", 0))
-    return result
+        r["promptTokens"] = int(r.get("promptTokens", 0))
+        r["completionTokens"] = int(r.get("completionTokens", 0))
+        r["count"] = int(r.get("count", 0))
+        grand_prompt += r["promptTokens"]
+        grand_completion += r["completionTokens"]
+        grand_count += r["count"]
+    result.sort(key=lambda x: x["promptTokens"] + x["completionTokens"], reverse=True)
+    return {
+        "records": result,
+        "grand_prompt": grand_prompt,
+        "grand_completion": grand_completion,
+        "grand_count": grand_count,
+    }
 
 
 # ---------------------------------------------------------------------------

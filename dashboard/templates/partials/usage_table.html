@@ -53,11 +53,24 @@
 
 {% if records.total_pages > 1 %}
 <div class="flex items-center justify-between mt-4">
-  <p class="text-xs text-surface-500 font-mono">
-    共 {{ records.total }} 条 — 第 {{ records.page }}/{{ records.total_pages }} 页
-  </p>
+  <div class="flex items-center gap-2">
+    <p class="text-xs text-surface-500 font-mono">
+      共 {{ records.total }} 条 — 第 {{ records.page }}/{{ records.total_pages }} 页
+    </p>
+    <div class="flex items-center gap-1">
+      <input type="number" min="1" max="{{ records.total_pages }}" placeholder="页码"
+             class="w-16 px-1.5 py-0.5 text-xs font-mono text-center border border-surface-200/60 rounded bg-white/50 focus:outline-none focus:border-gold-400"
+             onkeydown="if(event.key==='Enter'){var p=Math.max(1,Math.min({{ records.total_pages }},parseInt(this.value)||1));htmx.ajax('GET','/usage/table?page='+p+'&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}',{target:'#usage-table-area',swap:'innerHTML'})}">
+      <button onclick="var inp=this.previousElementSibling;var p=Math.max(1,Math.min({{ records.total_pages }},parseInt(inp.value)||1));htmx.ajax('GET','/usage/table?page='+p+'&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}',{target:'#usage-table-area',swap:'innerHTML'})"
+              class="btn-ghost px-2 py-0.5 rounded text-xs font-mono">跳转</button>
+    </div>
+  </div>
   <div class="flex gap-1">
     {% if records.page > 1 %}
+    <a href="/usage?page=1&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-get="/usage/table?page=1&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-target="#usage-table-area" hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">首页</a>
     <a href="/usage?page={{ records.page - 1 }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
        hx-get="/usage/table?page={{ records.page - 1 }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
        hx-target="#usage-table-area"
@@ -70,6 +83,10 @@
        hx-target="#usage-table-area"
        hx-swap="innerHTML"
        class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">下一页</a>
+    <a href="/usage?page={{ records.total_pages }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-get="/usage/table?page={{ records.total_pages }}&start={{ start }}&end={{ end }}&user_id={{ selected_user }}&model={{ selected_model }}"
+       hx-target="#usage-table-area" hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">末页</a>
     {% endif %}
   </div>
 </div>

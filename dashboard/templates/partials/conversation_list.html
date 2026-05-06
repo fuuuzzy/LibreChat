@@ -30,9 +30,21 @@
 
 {% if convos.total_pages > 1 %}
 <div class="px-4 py-3 border-t border-surface-200/60 flex items-center justify-between">
-  <p class="text-[10px] text-surface-500 font-mono">共 {{ convos.total }} 个会话</p>
+  <div class="flex items-center gap-2">
+    <p class="text-[10px] text-surface-500 font-mono">共 {{ convos.total }} 个会话</p>
+    <div class="flex items-center gap-1">
+      <input type="number" min="1" max="{{ convos.total_pages }}" placeholder="{{ convos.page }}/{{ convos.total_pages }}"
+             class="w-16 px-1.5 py-0.5 text-[10px] font-mono text-center border border-surface-200/60 rounded bg-white/50 focus:outline-none focus:border-gold-400"
+             onkeydown="if(event.key==='Enter'){var p=Math.max(1,Math.min({{ convos.total_pages }},parseInt(this.value)||1));htmx.ajax('GET','/sessions/conversations?user_id={{ user_id }}&page='+p,{target:'#convo-list-area',swap:'innerHTML'})}">
+      <button onclick="var inp=this.previousElementSibling;var p=Math.max(1,Math.min({{ convos.total_pages }},parseInt(inp.value)||1));htmx.ajax('GET','/sessions/conversations?user_id={{ user_id }}&page='+p,{target:'#convo-list-area',swap:'innerHTML'})"
+              class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">跳转</button>
+    </div>
+  </div>
   <div class="flex gap-1">
     {% if convos.page > 1 %}
+    <button hx-get="/sessions/conversations?user_id={{ user_id }}&page=1"
+            hx-target="#convo-list-area" hx-swap="innerHTML"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">首页</button>
     <button hx-get="/sessions/conversations?user_id={{ user_id }}&page={{ convos.page - 1 }}"
             hx-target="#convo-list-area" hx-swap="innerHTML"
             class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">上一页</button>
@@ -41,6 +53,9 @@
     <button hx-get="/sessions/conversations?user_id={{ user_id }}&page={{ convos.page + 1 }}"
             hx-target="#convo-list-area" hx-swap="innerHTML"
             class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">下一页</button>
+    <button hx-get="/sessions/conversations?user_id={{ user_id }}&page={{ convos.total_pages }}"
+            hx-target="#convo-list-area" hx-swap="innerHTML"
+            class="btn-ghost px-2 py-0.5 rounded text-[10px] font-mono">末页</button>
     {% endif %}
   </div>
 </div>

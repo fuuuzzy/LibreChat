@@ -1,40 +1,79 @@
-<div class="bento-card rounded-xl overflow-x-auto">
-  <table class="w-full data-table">
+{% for item in by_user.records %}
+<div class="bento-card rounded-xl overflow-hidden mb-3">
+  <table class="w-full">
+    <!-- User header row -->
     <thead>
-      <tr>
-        <th class="text-left">用户</th>
-        <th class="text-left">邮箱</th>
-        <th class="text-left">模型</th>
-        <th class="text-right">输入</th>
-        <th class="text-right">输出</th>
-        <th class="text-right">调用数</th>
+      <tr class="bg-surface-50/50">
+        <th class="text-left px-4 py-3 w-[40%]">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-gold-400/20 to-gold-600/20 flex items-center justify-center flex-shrink-0">
+              <span class="text-xs font-bold text-gold-700">{{ ((item.userInfo.name if item.userInfo else None) or (item.userInfo.email if item.userInfo else None) or '?')[0] | upper }}</span>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-surface-800 truncate text-left">{{ item.userInfo.name if item.userInfo else '未知用户' }}</p>
+              <p class="text-[10px] text-surface-400 font-mono truncate text-left">{{ item.userInfo.email if item.userInfo else '' }}</p>
+            </div>
+          </div>
+        </th>
+        <th class="text-right px-4 py-3 font-mono text-[10px] text-surface-400 uppercase tracking-wider font-medium w-[15%]">输入</th>
+        <th class="text-right px-4 py-3 font-mono text-[10px] text-surface-400 uppercase tracking-wider font-medium w-[15%]">输出</th>
+        <th class="text-right px-4 py-3 font-mono text-[10px] text-surface-400 uppercase tracking-wider font-medium w-[15%]">合计</th>
+        <th class="text-right px-4 py-3 font-mono text-[10px] text-surface-400 uppercase tracking-wider font-medium w-[15%]">调用</th>
       </tr>
     </thead>
+    <!-- User totals row -->
     <tbody>
-      {% for item in by_user.records %}
-      <tr>
-        <td class="font-medium text-surface-800">{{ item.userInfo.name if item.userInfo else '-' }}</td>
-        <td class="text-surface-500 text-xs">{{ item.userInfo.email if item.userInfo else '-' }}</td>
-        <td class="font-mono text-xs text-surface-600">{{ item._id.model or '未知' }}</td>
-        <td class="text-right font-mono text-gold-500 text-xs">{{ "{:,}".format(item.promptTokens | default(0)) }}</td>
-        <td class="text-right font-mono text-gold-600 text-xs">{{ "{:,}".format(item.completionTokens | default(0)) }}</td>
-        <td class="text-right font-mono text-xs">{{ "{:,}".format(item.count | default(0)) }}</td>
+      <tr class="border-t border-surface-200/40 bg-gold-400/[0.03]">
+        <td class="px-4 py-2 text-xs font-medium text-surface-600">全部模型</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-gold-500 font-medium">{{ "{:,}".format(item.totalPrompt) }}</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-gold-600 font-medium">{{ "{:,}".format(item.totalCompletion) }}</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-surface-700 font-medium">{{ "{:,}".format(item.totalPrompt + item.totalCompletion) }}</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-surface-600 font-medium">{{ "{:,}".format(item.totalCount) }}</td>
+      </tr>
+      <!-- Model detail rows -->
+      {% for m in item.models %}
+      <tr class="border-t border-surface-100/60">
+        <td class="px-4 py-2 font-mono text-xs text-surface-500">{{ m.model or '未知' }}</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-surface-500">{{ "{:,}".format(m.promptTokens) }}</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-surface-500">{{ "{:,}".format(m.completionTokens) }}</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-surface-400">{{ "{:,}".format(m.promptTokens + m.completionTokens) }}</td>
+        <td class="px-4 py-2 text-right font-mono text-xs text-surface-400">{{ "{:,}".format(m.count) }}</td>
       </tr>
       {% endfor %}
-      {% if not by_user.records %}
-      <tr><td colspan="6" class="text-center py-8 text-surface-400 font-mono text-sm">暂无数据</td></tr>
+      {% if not item.models %}
+      <tr><td colspan="5" class="px-4 py-3 text-center text-surface-400 font-mono text-xs">无模型数据</td></tr>
       {% endif %}
     </tbody>
   </table>
 </div>
+{% endfor %}
+
+{% if not by_user.records %}
+<div class="bento-card rounded-xl">
+  <div class="text-center py-12 text-surface-400 font-mono text-sm">暂无数据</div>
+</div>
+{% endif %}
 
 {% if by_user.total_pages > 1 %}
 <div class="flex items-center justify-between mt-4">
-  <p class="text-xs text-surface-500 font-mono">
-    共 {{ by_user.total }} 条 — 第 {{ by_user.page }}/{{ by_user.total_pages }} 页
-  </p>
+  <div class="flex items-center gap-2">
+    <p class="text-xs text-surface-500 font-mono">
+      共 {{ by_user.total }} 用户 — 第 {{ by_user.page }}/{{ by_user.total_pages }} 页
+    </p>
+    <div class="flex items-center gap-1">
+      <input type="number" min="1" max="{{ by_user.total_pages }}" placeholder="页码"
+             class="w-16 px-1.5 py-0.5 text-xs font-mono text-center border border-surface-200/60 rounded bg-white/50 focus:outline-none focus:border-gold-400"
+             onkeydown="if(event.key==='Enter'){var p=Math.max(1,Math.min({{ by_user.total_pages }},parseInt(this.value)||1));htmx.ajax('GET','/tokens/table?page='+p+'&start={{ start }}&end={{ end }}',{target:'#token-table-area',swap:'innerHTML'})}">
+      <button onclick="var inp=this.previousElementSibling;var p=Math.max(1,Math.min({{ by_user.total_pages }},parseInt(inp.value)||1));htmx.ajax('GET','/tokens/table?page='+p+'&start={{ start }}&end={{ end }}',{target:'#token-table-area',swap:'innerHTML'})"
+              class="btn-ghost px-2 py-0.5 rounded text-xs font-mono">跳转</button>
+    </div>
+  </div>
   <div class="flex gap-1">
     {% if by_user.page > 1 %}
+    <a href="/tokens?page=1&start={{ start }}&end={{ end }}"
+       hx-get="/tokens/table?page=1&start={{ start }}&end={{ end }}"
+       hx-target="#token-table-area" hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">首页</a>
     <a href="/tokens?page={{ by_user.page - 1 }}&start={{ start }}&end={{ end }}"
        hx-get="/tokens/table?page={{ by_user.page - 1 }}&start={{ start }}&end={{ end }}"
        hx-target="#token-table-area"
@@ -47,6 +86,10 @@
        hx-target="#token-table-area"
        hx-swap="innerHTML"
        class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">下一页</a>
+    <a href="/tokens?page={{ by_user.total_pages }}&start={{ start }}&end={{ end }}"
+       hx-get="/tokens/table?page={{ by_user.total_pages }}&start={{ start }}&end={{ end }}"
+       hx-target="#token-table-area" hx-swap="innerHTML"
+       class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">末页</a>
     {% endif %}
   </div>
 </div>

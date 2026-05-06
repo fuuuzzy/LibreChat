@@ -125,7 +125,8 @@ def export_usage_records(records: list[dict]) -> io.BytesIO:
     ws.title = "使用记录明细"
 
     headers = [
-        "时间", "用户", "邮箱", "模型", "输入Token", "输出Token",
+        "时间", "用户", "邮箱", "模型", "来源", "输入Token", "输出Token",
+        "缓存写入Token", "缓存读取Token",
     ]
     ws.append(headers)
     _style_header(ws, len(headers))
@@ -137,8 +138,11 @@ def export_usage_records(records: list[dict]) -> io.BytesIO:
             user_info.get("name", ""),
             user_info.get("email", ""),
             rec.get("model", ""),
+            rec.get("context", ""),
             rec.get("promptTokens", 0),
             rec.get("completionTokens", 0),
+            rec.get("writeTokens", 0),
+            rec.get("readTokens", 0),
         ])
 
     _auto_width(ws)

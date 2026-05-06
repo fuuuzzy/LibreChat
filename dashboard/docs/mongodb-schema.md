@@ -187,6 +187,8 @@
 
 ### transactions - 交易记录表
 
+> **详细分析**: [transactions-analysis.md](./transactions-analysis.md) — 包含每个字段的深度解读、记录生成机制、费率计算逻辑、缓存 Token 处理、数据看板查询建议。
+
 **集合名**: `transactions`
 **模型名**: `Transaction`
 **用途**: 记录 Token 使用和计费信息

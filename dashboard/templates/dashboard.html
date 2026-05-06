@@ -83,22 +83,24 @@
         <p class="text-2xl font-bold text-surface-700 font-mono mt-2" data-count="{{ summary.msg_count | default(0) }}">{{ summary.msg_count | default(0) }}</p>
       </div>
 
-      <!-- Transactions — spans 2 cols -->
+      <!-- AI Requests — spans 2 cols -->
       <div class="bento-card stat-glow rounded-xl p-4 col-span-2 fade-in fade-in-4 flex flex-col justify-between">
-        <p class="text-[10px] font-mono text-surface-500 tracking-wider uppercase">交易数</p>
-        <p class="text-2xl font-bold text-surface-700 font-mono mt-2" data-count="{{ summary.transaction_count | default(0) }}">{{ summary.transaction_count | default(0) }}</p>
+        <p class="text-[10px] font-mono text-surface-500 tracking-wider uppercase">AI 调用次数</p>
+        <p class="text-2xl font-bold text-surface-700 font-mono mt-2" data-count="{{ summary.ai_request_count | default(0) }}">{{ "{:,}".format(summary.ai_request_count | default(0)) }}</p>
       </div>
 
       <!-- Input Tokens -->
-      <div class="bento-card rounded-xl p-4 col-span-2 fade-in fade-in-2" style="border-left:3px solid #fbbf24;">
+      <div class="bento-card rounded-xl p-4 col-span-3 fade-in fade-in-2" style="border-left:3px solid #fbbf24;">
         <p class="text-[10px] font-mono text-surface-500 tracking-wider uppercase mb-1">输入 Token</p>
         <p class="text-xl font-bold text-gold-500 font-mono">{{ "{:,}".format(summary.total_input_tokens | default(0)) }}</p>
+        <p class="text-[10px] font-mono text-surface-400 mt-1">平均 {{ "{:,}".format(summary.avg_input_tokens | default(0)) }} / 次</p>
       </div>
 
       <!-- Output Tokens -->
-      <div class="bento-card rounded-xl p-4 col-span-2 fade-in fade-in-3" style="border-left:3px solid #f59e0b;">
+      <div class="bento-card rounded-xl p-4 col-span-3 fade-in fade-in-3" style="border-left:3px solid #f59e0b;">
         <p class="text-[10px] font-mono text-surface-500 tracking-wider uppercase mb-1">输出 Token</p>
         <p class="text-xl font-bold text-gold-600 font-mono">{{ "{:,}".format(summary.total_output_tokens | default(0)) }}</p>
+        <p class="text-[10px] font-mono text-surface-400 mt-1">平均 {{ "{:,}".format(summary.avg_output_tokens | default(0)) }} / 次</p>
       </div>
     </div>
 
@@ -132,7 +134,7 @@
               <th class="text-left">邮箱</th>
               <th class="text-right">输入</th>
               <th class="text-right">输出</th>
-              <th class="text-right">消息数</th>
+              <th class="text-right">调用次数</th>
             </tr>
           </thead>
           <tbody>
@@ -169,8 +171,9 @@ new Chart(document.getElementById('trendChart'), {
   data: {
     labels: trendData.map(d => d._id),
     datasets: [
-      { label: '输入', data: trendData.map(d => d.promptTokens), borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#fbbf24' },
-      { label: '输出', data: trendData.map(d => d.completionTokens), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.06)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#f59e0b' },
+      { label: '输入 Token', data: trendData.map(d => d.promptTokens), borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#fbbf24', yAxisID: 'y' },
+      { label: '输出 Token', data: trendData.map(d => d.completionTokens), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.06)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#f59e0b', yAxisID: 'y' },
+      { label: '调用次数', data: trendData.map(d => d.count), borderColor: '#94a3b8', backgroundColor: 'transparent', borderDash: [4, 4], tension: 0.4, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, pointHoverBackgroundColor: '#94a3b8', yAxisID: 'y1' },
     ]
   },
   options: {
@@ -182,7 +185,8 @@ new Chart(document.getElementById('trendChart'), {
     },
     scales: {
       x: { grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 8 } },
-      y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.03)' }, ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(0)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } }
+      y: { beginAtZero: true, position: 'left', grid: { color: 'rgba(0,0,0,0.03)' }, ticks: { callback: v => v >= 1e6 ? (v/1e6).toFixed(0)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } },
+      y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#94a3b8' } }
     }
   }
 });

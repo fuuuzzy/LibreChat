@@ -12,11 +12,11 @@ async def get_summary() -> dict:
     user_count = await db.users.count_documents({})
     convo_count = await db.conversations.count_documents({})
     msg_count = await db.messages.count_documents({})
-    transaction_count = await db.transactions.count_documents({})
 
-    # Total token consumption from transactions
+    # Total token consumption + AI request count from transactions
     # tokenType: prompt = 输入, completion = 输出
-    # tokenValue: 负数，取绝对值
+    # rawAmount: 实际 token 数量，负数，取绝对值
+    # 每次 AI 请求产生两条记录（prompt + completion），共享同一 messageId
     pipeline = [
         {"$group": {
             "_id": None,
@@ -24,7 +24,7 @@ async def get_summary() -> dict:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -33,23 +33,32 @@ async def get_summary() -> dict:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
             },
-        }}
+            "messageIds": {"$addToSet": {"$ifNull": ["$messageId", "$_id"]}},
+        }},
+        {"$addFields": {"aiRequestCount": {"$size": "$messageIds"}}},
+        {"$project": {"messageIds": 0}},
     ]
     agg = await db.transactions.aggregate(pipeline).to_list(1)
     token_stats = agg[0] if agg else {}
+
+    total_input = int(token_stats.get("totalPrompt", 0))
+    total_output = int(token_stats.get("totalCompletion", 0))
+    ai_requests = int(token_stats.get("aiRequestCount", 0))
 
     return {
         "user_count": user_count,
         "convo_count": convo_count,
         "msg_count": msg_count,
-        "transaction_count": transaction_count,
-        "total_input_tokens": int(token_stats.get("totalPrompt", 0)),
-        "total_output_tokens": int(token_stats.get("totalCompletion", 0)),
+        "ai_request_count": ai_requests,
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "avg_input_tokens": total_input // ai_requests if ai_requests else 0,
+        "avg_output_tokens": total_output // ai_requests if ai_requests else 0,
     }
 
 
@@ -70,7 +79,7 @@ async def get_token_trend(days: int = 30) -> list[dict]:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -79,7 +88,7 @@ async def get_token_trend(days: int = 30) -> list[dict]:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -110,7 +119,7 @@ async def get_token_by_model() -> list[dict]:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -119,7 +128,7 @@ async def get_token_by_model() -> list[dict]:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -157,7 +166,7 @@ async def get_top_users(limit: int = 10) -> list[dict]:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -166,7 +175,7 @@ async def get_top_users(limit: int = 10) -> list[dict]:
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -223,7 +232,7 @@ async def get_token_by_user(
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -232,7 +241,7 @@ async def get_token_by_user(
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -307,7 +316,7 @@ async def get_token_by_model_detail(
     pipeline += [
         {"$group": {
             "_id": {"model": "$model", "tokenType": "$tokenType"},
-            "tokenTotal": {"$sum": {"$abs": {"$ifNull": ["$tokenValue", 0]}}},
+            "tokenTotal": {"$sum": {"$abs": {"$ifNull": ["$rawAmount", 0]}}},
             "messageIds": {"$addToSet": {"$ifNull": ["$messageId", "$_id"]}},
         }},
         {"$addFields": {"count": {"$size": "$messageIds"}}},
@@ -399,7 +408,7 @@ async def get_user_list(
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -408,7 +417,7 @@ async def get_user_list(
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -488,7 +497,7 @@ async def get_user_conversations(
                     "$sum": {
                         "$cond": [
                             {"$eq": ["$tokenType", "prompt"]},
-                            {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                            {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                             0
                         ]
                     }
@@ -497,7 +506,7 @@ async def get_user_conversations(
                     "$sum": {
                         "$cond": [
                             {"$eq": ["$tokenType", "completion"]},
-                            {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                            {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                             0
                         ]
                     }
@@ -663,7 +672,7 @@ async def get_transactions_for_export(
 
     pipeline += [
         {"$addFields": {
-            "tokenValueAbs": {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+            "tokenValueAbs": {"$abs": {"$ifNull": ["$rawAmount", 0]}},
         }},
         {"$lookup": {
             "from": "users",
@@ -747,11 +756,12 @@ async def get_usage_records(
             "model": {"$first": "$model"},
             "createdAt": {"$first": "$createdAt"},
             "conversationId": {"$first": "$conversationId"},
+            "context": {"$first": "$context"},
             "promptTokens": {
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -760,7 +770,34 @@ async def get_usage_records(
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
+                        0
+                    ]
+                }
+            },
+            "inputTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "prompt"]},
+                        {"$abs": {"$ifNull": ["$inputTokens", 0]}},
+                        0
+                    ]
+                }
+            },
+            "writeTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "prompt"]},
+                        {"$abs": {"$ifNull": ["$writeTokens", 0]}},
+                        0
+                    ]
+                }
+            },
+            "readTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "prompt"]},
+                        {"$abs": {"$ifNull": ["$readTokens", 0]}},
                         0
                     ]
                 }
@@ -796,6 +833,9 @@ async def get_usage_records(
     for r in records:
         r["promptTokens"] = int(r.get("promptTokens", 0))
         r["completionTokens"] = int(r.get("completionTokens", 0))
+        r["inputTokens"] = int(r.get("inputTokens", 0))
+        r["writeTokens"] = int(r.get("writeTokens", 0))
+        r["readTokens"] = int(r.get("readTokens", 0))
 
     return {
         "records": records,
@@ -865,11 +905,12 @@ async def get_usage_records_for_export(
             "user": {"$first": "$user"},
             "model": {"$first": "$model"},
             "createdAt": {"$first": "$createdAt"},
+            "context": {"$first": "$context"},
             "promptTokens": {
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "prompt"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
                         0
                     ]
                 }
@@ -878,7 +919,34 @@ async def get_usage_records_for_export(
                 "$sum": {
                     "$cond": [
                         {"$eq": ["$tokenType", "completion"]},
-                        {"$abs": {"$ifNull": ["$tokenValue", 0]}},
+                        {"$abs": {"$ifNull": ["$rawAmount", 0]}},
+                        0
+                    ]
+                }
+            },
+            "inputTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "prompt"]},
+                        {"$abs": {"$ifNull": ["$inputTokens", 0]}},
+                        0
+                    ]
+                }
+            },
+            "writeTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "prompt"]},
+                        {"$abs": {"$ifNull": ["$writeTokens", 0]}},
+                        0
+                    ]
+                }
+            },
+            "readTokens": {
+                "$sum": {
+                    "$cond": [
+                        {"$eq": ["$tokenType", "prompt"]},
+                        {"$abs": {"$ifNull": ["$readTokens", 0]}},
                         0
                     ]
                 }
@@ -902,6 +970,9 @@ async def get_usage_records_for_export(
     for r in records:
         r["promptTokens"] = int(r.get("promptTokens", 0))
         r["completionTokens"] = int(r.get("completionTokens", 0))
+        r["inputTokens"] = int(r.get("inputTokens", 0))
+        r["writeTokens"] = int(r.get("writeTokens", 0))
+        r["readTokens"] = int(r.get("readTokens", 0))
 
     return records
 

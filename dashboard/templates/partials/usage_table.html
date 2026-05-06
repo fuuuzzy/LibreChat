@@ -6,6 +6,7 @@
         <th class="text-left">用户</th>
         <th class="text-left">邮箱</th>
         <th class="text-left" style="min-width: 180px;">模型</th>
+        <th class="text-left">来源</th>
         <th class="text-right">输入 Token</th>
         <th class="text-right">输出 Token</th>
       </tr>
@@ -25,8 +26,18 @@
         <td class="font-mono text-xs text-surface-600">
           {{ item.model or '未知' }}
         </td>
-        <td class="text-right font-mono text-gold-500 text-xs">
-          {{ "{:,}".format(item.promptTokens | default(0)) }}
+        <td class="text-xs text-surface-500">
+          {{ item.context or '-' }}
+        </td>
+        <td class="text-right font-mono text-xs">
+          <span class="text-gold-500">{{ "{:,}".format(item.promptTokens | default(0)) }}</span>
+          {% if item.writeTokens or item.readTokens %}
+          <br><span class="text-[10px] text-surface-400">
+            {% if item.inputTokens %}输入 {{ "{:,}".format(item.inputTokens) }}{% endif %}
+            {% if item.writeTokens %} 写入 {{ "{:,}".format(item.writeTokens) }}{% endif %}
+            {% if item.readTokens %} 读取 {{ "{:,}".format(item.readTokens) }}{% endif %}
+          </span>
+          {% endif %}
         </td>
         <td class="text-right font-mono text-gold-600 text-xs">
           {{ "{:,}".format(item.completionTokens | default(0)) }}

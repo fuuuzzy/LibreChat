@@ -1132,3 +1132,9 @@ async def get_file_users() -> list[dict]:
         {"$sort": {"userInfo.name": 1}},
     ]
     return await db.files.aggregate(pipeline).to_list(1000)
+
+
+async def get_file_by_id(file_id: str) -> dict | None:
+    """Retrieve a single file document by its file_id."""
+    db = get_db()
+    return await db.files.find_one({"file_id": file_id})

@@ -131,7 +131,56 @@
   </main>
 </div>
 
+<!-- File preview modal (lives outside HTMX partial so it persists across swaps) -->
+<div id="preview-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm" onclick="closePreview()">
+  <div class="relative max-w-[90vw] max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+    <button onclick="closePreview()" class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center text-surface-600 hover:text-red-500 transition z-10">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+    <img id="preview-img" src="" alt="" class="max-w-[90vw] max-h-[85vh] rounded-lg shadow-2xl object-contain hidden">
+    <iframe id="preview-pdf" src="" class="w-[85vw] h-[85vh] rounded-lg shadow-2xl bg-white border-0 hidden"></iframe>
+    <p id="preview-filename" class="text-center text-white text-xs font-mono mt-2 opacity-80"></p>
+  </div>
+</div>
+
 <script>
+function openPreview(src, filename, type) {
+  var modal = document.getElementById('preview-modal');
+  var img = document.getElementById('preview-img');
+  var iframe = document.getElementById('preview-pdf');
+  var nameEl = document.getElementById('preview-filename');
+
+  img.classList.add('hidden');
+  iframe.classList.add('hidden');
+
+  if (type === 'pdf') {
+    iframe.src = src;
+    iframe.classList.remove('hidden');
+  } else {
+    img.src = src;
+    img.alt = filename;
+    img.classList.remove('hidden');
+  }
+
+  nameEl.textContent = filename;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  document.body.style.overflow = 'hidden';
+}
+function closePreview() {
+  var modal = document.getElementById('preview-modal');
+  var img = document.getElementById('preview-img');
+  var iframe = document.getElementById('preview-pdf');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+  img.src = '';
+  iframe.src = '';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closePreview();
+});
+
 function setFileType(type) {
   const form = document.getElementById('files-filter-form');
   form.querySelector('input[name="file_type"]').value = type;

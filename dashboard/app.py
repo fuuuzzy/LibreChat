@@ -1,8 +1,9 @@
+import logging
 import sys
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Query, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -14,6 +15,9 @@ import auth
 import queries
 import export as excel_export
 import db
+import s3_client
+
+logger = logging.getLogger(__name__)
 
 _DIR = Path(__file__).resolve().parent
 
@@ -398,6 +402,101 @@ async def files_table_partial(
         "selected_type": file_type,
         "selected_user": user_id,
     })
+
+
+# ---------------------------------------------------------------------------
+# File proxy — image preview & download
+# ---------------------------------------------------------------------------
+
+
+@app.get("/files/image/{file_id}")
+async def file_image(request: Request, file_id: str):
+    """Serve an image file for <img src> preview. S3 proxy, bypasses presigned URL expiry."""
+    if not _check_auth(request):
+        return Response(status_code=401)
+
+    file_doc = await queries.get_file_by_id(file_id)
+    if not file_doc:
+        return Response(status_code=404)
+
+    source = file_doc.get("source", "local")
+    filepath = file_doc.get("filepath", "")
+
+    if source == "s3":
+        try:
+            body, content_type = s3_client.get_object_bytes(filepath)
+        except Exception as e:
+            logger.error(f"[file_image] S3 fetch failed for {file_id}: {e}")
+            return Response(status_code=502)
+        return Response(content=body, media_type=content_type)
+
+    # Local: filepath is like /images/userId/filename — not usable from dashboard
+    # Fall back to 404 for non-S3 sources for now
+    return Response(status_code=404)
+
+
+@app.get("/files/download/{file_id}")
+async def file_download(request: Request, file_id: str):
+    """Download a file. Streams from S3 for large files."""
+    if not _check_auth(request):
+        return Response(status_code=401)
+
+    file_doc = await queries.get_file_by_id(file_id)
+    if not file_doc:
+        return Response(status_code=404)
+
+    source = file_doc.get("source", "local")
+    filepath = file_doc.get("filepath", "")
+    filename = file_doc.get("filename", file_id)
+    file_type = file_doc.get("type", "application/octet-stream")
+
+    if source == "s3":
+        try:
+            body, content_type = s3_client.get_object_bytes(filepath)
+        except Exception as e:
+            logger.error(f"[file_download] S3 fetch failed for {file_id}: {e}")
+            return Response(status_code=502)
+
+        # Prefer the stored MIME type; fall back to S3 content type
+        ct = file_type if file_type else content_type
+        return Response(
+            content=body,
+            media_type=ct,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    return Response(status_code=404)
+
+
+@app.get("/files/preview/{file_id}")
+async def file_preview(request: Request, file_id: str):
+    """Serve a file with inline disposition for in-browser preview (PDF, images, etc.)."""
+    if not _check_auth(request):
+        return Response(status_code=401)
+
+    file_doc = await queries.get_file_by_id(file_id)
+    if not file_doc:
+        return Response(status_code=404)
+
+    source = file_doc.get("source", "local")
+    filepath = file_doc.get("filepath", "")
+    file_type = file_doc.get("type", "application/octet-stream")
+
+    if source == "s3":
+        try:
+            body, content_type = s3_client.get_object_bytes(filepath)
+        except Exception as e:
+            logger.error(f"[file_preview] S3 fetch failed for {file_id}: {e}")
+            return Response(status_code=502)
+
+        ct = file_type if file_type else content_type
+        return Response(
+            content=body,
+            media_type=ct,
+            headers={"Content-Disposition": "inline"},
+        )
+
+    return Response(status_code=404)
 
 
 # ---------------------------------------------------------------------------

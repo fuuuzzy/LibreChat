@@ -2,26 +2,48 @@
   <table class="w-full data-table">
     <thead>
       <tr>
+        <th class="text-left">预览</th>
         <th class="text-left">文件名</th>
         <th class="text-left">类型</th>
         <th class="text-right">大小</th>
         <th class="text-left">用户</th>
         <th class="text-left">来源</th>
         <th class="text-left">上传时间</th>
+        <th class="text-center">操作</th>
       </tr>
     </thead>
     <tbody>
       {% for f in files.records %}
       <tr>
+        <td class="w-16">
+          {% if f.type and f.type.startswith('image') and f.source == 's3' %}
+          <img src="/files/image/{{ f.file_id }}"
+               alt="{{ f.filename or '' }}"
+               class="file-thumb rounded border border-surface-200/60 cursor-pointer hover:shadow-md transition"
+               onclick="openPreview('/files/preview/{{ f.file_id }}', '{{ f.filename or '' }}', 'image')"
+               loading="lazy"
+               onerror="this.style.display='none'">
+          {% elif f.type and f.type.startswith('image') %}
+          <div class="w-10 h-10 rounded bg-surface-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          </div>
+          {% elif f.type and 'pdf' in f.type and f.source == 's3' %}
+          <div class="w-10 h-10 rounded bg-red-50 flex items-center justify-center cursor-pointer hover:bg-red-100 transition"
+               onclick="openPreview('/files/preview/{{ f.file_id }}', '{{ f.filename or '' }}', 'pdf')">
+            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+          </div>
+          {% elif f.type and 'pdf' in f.type %}
+          <div class="w-10 h-10 rounded bg-red-50 flex items-center justify-center">
+            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+          </div>
+          {% else %}
+          <div class="w-10 h-10 rounded bg-surface-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+          </div>
+          {% endif %}
+        </td>
         <td>
           <div class="flex items-center gap-2">
-            {% if f.type and f.type.startswith('image') %}
-            <svg class="w-4 h-4 text-gold-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            {% elif f.type and 'pdf' in f.type %}
-            <svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-            {% else %}
-            <svg class="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-            {% endif %}
             <span class="font-medium text-surface-800 text-xs truncate max-w-[200px]" title="{{ f.filename or '' }}">{{ f.filename or '-' }}</span>
           </div>
         </td>
@@ -43,10 +65,22 @@
         </td>
         <td class="font-mono text-[11px] text-surface-500">{{ f.source or 'local' }}</td>
         <td class="text-[11px] font-mono text-surface-400">{{ f.createdAt | format_utc8 if f.createdAt else '-' }}</td>
+        <td class="text-center">
+          {% if f.source == 's3' %}
+          <a href="/files/download/{{ f.file_id }}"
+             class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-mono text-surface-500 border border-surface-200/60 hover:border-gold-400/40 hover:text-gold-700 hover:bg-gold-400/5 transition"
+             title="下载文件">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            下载
+          </a>
+          {% else %}
+          <span class="text-[11px] text-surface-300 font-mono">-</span>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
       {% if not files.records %}
-      <tr><td colspan="6" class="text-center py-8 text-surface-400 font-mono text-sm">暂无文件</td></tr>
+      <tr><td colspan="8" class="text-center py-8 text-surface-400 font-mono text-sm">暂无文件</td></tr>
       {% endif %}
     </tbody>
   </table>
@@ -86,7 +120,8 @@
        class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">下一页</a>
     <a href="/files?page={{ files.total_pages }}&search={{ search }}&file_type={{ selected_type }}&user_id={{ selected_user }}"
        hx-get="/files/table?page={{ files.total_pages }}&search={{ search }}&file_type={{ selected_type }}&user_id={{ selected_user }}"
-       hx-target="#files-table-area" hx-swap="innerHTML"
+       hx-target="#files-table-area"
+       hx-swap="innerHTML"
        class="btn-ghost px-3 py-1 rounded-lg text-xs font-mono">末页</a>
     {% endif %}
   </div>

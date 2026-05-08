@@ -2,24 +2,26 @@
   {% for msg in messages.records %}
   <div class="rounded-lg p-3 text-sm
     {% if msg.isCreatedByUser %}msg-user{% else %}msg-assistant{% endif %}">
-    <div class="flex items-center justify-between mb-1.5">
-      <span class="text-[10px] font-mono font-semibold tracking-wider uppercase
-        {% if msg.isCreatedByUser %}text-gold-600{% else %}text-gold-500{% endif %}">
-        {% if msg.isCreatedByUser %}用户{% else %}{{ (msg.sender or msg.model or '助手') }}{% endif %}
-      </span>
-      <div class="flex items-center gap-2">
-        {% if msg.model %}
-        <span class="badge badge-default">{{ msg.model }}</span>
+    <div class="flex items-start justify-between gap-2 mb-1.5">
+      <div class="flex items-center gap-1.5 shrink-0">
+        {% if msg.isCreatedByUser %}
+        <svg class="w-3 h-3 text-gold-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>
+        <span class="text-[10px] font-mono font-semibold tracking-wider uppercase text-gold-600">用户</span>
+        {% else %}
+        <svg class="w-3 h-3 text-slate-400" fill="currentColor" viewBox="0 0 20 20"><path d="M13 7H7v6h6V7z"/><path fill-rule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clip-rule="evenodd"/></svg>
+        <span class="text-[10px] font-mono font-semibold tracking-wider uppercase text-slate-500">{{ (msg.sender or msg.model or '助手') }}</span>
         {% endif %}
+      </div>
+      <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
         {% if msg.tokenCount %}
-        <span class="text-[10px] font-mono text-surface-500">{{ msg.tokenCount }} tok</span>
+        <span class="text-[10px] font-mono whitespace-nowrap {% if msg.isCreatedByUser %}text-gold-500{% else %}text-surface-400{% endif %}">{{ msg.tokenCount }} token</span>
         {% endif %}
         {% if msg.error %}
         <span class="badge badge-error">错误</span>
         {% endif %}
       </div>
     </div>
-    <p class="text-surface-700 whitespace-pre-wrap break-words text-[13px] leading-relaxed">{{ (msg.text or msg.content_text or '')[:2000] }}{% if (msg.text or msg.content_text or '')|length > 2000 %}...{% endif %}</p>
+    <p class="{% if msg.isCreatedByUser %}text-surface-800{% else %}text-surface-600{% endif %} whitespace-pre-wrap break-words text-[13px] leading-relaxed">{{ (msg.text or msg.content_text or '')[:2000] }}{% if (msg.text or msg.content_text or '')|length > 2000 %}...{% endif %}</p>
     {% if msg.file_items %}
     <div class="mt-2 flex flex-wrap gap-2">
       {% for item in msg.file_items %}
@@ -50,7 +52,7 @@
       {% endfor %}
     </div>
     {% endif %}
-    <p class="text-[10px] font-mono text-surface-400 mt-1.5">{{ msg.createdAt | format_utc8 if msg.createdAt else '' }}</p>
+    <p class="text-[10px] font-mono mt-1.5 {% if msg.isCreatedByUser %}text-gold-400{% else %}text-surface-400{% endif %}">{{ msg.createdAt | format_utc8 if msg.createdAt else '' }}</p>
   </div>
   {% endfor %}
   {% if not messages.records %}

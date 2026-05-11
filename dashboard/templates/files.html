@@ -139,11 +139,45 @@
     </button>
     <img id="preview-img" src="" alt="" class="max-w-[90vw] max-h-[85vh] rounded-lg shadow-2xl object-contain hidden">
     <iframe id="preview-pdf" src="" class="w-[85vw] h-[85vh] rounded-lg shadow-2xl bg-white border-0 hidden"></iframe>
+    <div id="preview-text" class="hidden max-w-[85vw] max-h-[85vh] rounded-lg shadow-2xl bg-white p-6 overflow-auto">
+      <pre id="preview-text-content" class="whitespace-pre-wrap text-sm text-surface-800 font-mono"></pre>
+    </div>
     <p id="preview-filename" class="text-center text-white text-xs font-mono mt-2 opacity-80"></p>
   </div>
 </div>
 
 <script>
+async function showTextPreview(file_id) {
+  var modal = document.getElementById('preview-modal');
+  var img = document.getElementById('preview-img');
+  var iframe = document.getElementById('preview-pdf');
+  var textDiv = document.getElementById('preview-text');
+  var textContent = document.getElementById('preview-text-content');
+  var nameEl = document.getElementById('preview-filename');
+
+  img.classList.add('hidden');
+  iframe.classList.add('hidden');
+  textDiv.classList.add('hidden');
+
+  try {
+    var resp = await fetch('/files/text/' + file_id, { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error('status: ' + resp.status);
+    var data = await resp.json();
+    textContent.textContent = data.text || '(空)';
+    nameEl.textContent = data.filename || file_id;
+    textDiv.classList.remove('hidden');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+  } catch (e) {
+    textContent.textContent = '加载失败: ' + e;
+    textDiv.classList.remove('hidden');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
+  }
+}
+
 function openPreview(src, filename, type) {
   var modal = document.getElementById('preview-modal');
   var img = document.getElementById('preview-img');
@@ -171,10 +205,12 @@ function closePreview() {
   var modal = document.getElementById('preview-modal');
   var img = document.getElementById('preview-img');
   var iframe = document.getElementById('preview-pdf');
+  var textDiv = document.getElementById('preview-text');
   modal.classList.add('hidden');
   modal.classList.remove('flex');
   img.src = '';
   iframe.src = '';
+  textDiv.classList.add('hidden');
   document.body.style.overflow = '';
 }
 document.addEventListener('keydown', function(e) {

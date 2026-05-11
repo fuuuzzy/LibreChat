@@ -3,7 +3,7 @@ import sys
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Query, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -16,6 +16,7 @@ import queries
 import export as excel_export
 import db
 import s3_client
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -409,6 +410,21 @@ async def files_table_partial(
 # ---------------------------------------------------------------------------
 
 
+def _image_ext_to_media_type(filename: str) -> str | None:
+    """Return a proper image MIME type based on file extension, or None if not an image."""
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    return {
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+        "webp": "image/webp",
+        "bmp": "image/bmp",
+        "svg": "image/svg+xml",
+        "ico": "image/x-icon",
+    }.get(ext)
+
+
 @app.get("/files/image/{file_id}")
 async def file_image(request: Request, file_id: str):
     """Serve an image file for <img src> preview. S3 proxy, bypasses presigned URL expiry."""
@@ -428,11 +444,34 @@ async def file_image(request: Request, file_id: str):
         except Exception as e:
             logger.error(f"[file_image] S3 fetch failed for {file_id}: {e}")
             return Response(status_code=502)
+
+        filename = file_doc.get("filename", "")
+        # text/plain stored as image — fix MIME type from extension
+        if content_type == "text/plain" and filename:
+            forced = _image_ext_to_media_type(filename)
+            if forced:
+                content_type = forced
+
         return Response(content=body, media_type=content_type)
 
-    # Local: filepath is like /images/userId/filename — not usable from dashboard
-    # Fall back to 404 for non-S3 sources for now
     return Response(status_code=404)
+
+
+@app.get("/files/text/{file_id}")
+async def file_text(request: Request, file_id: str):
+    """Return the text field of a file document as JSON."""
+    if not _check_auth(request):
+        return Response(status_code=401)
+
+    file_doc = await queries.get_file_by_id(file_id)
+    if not file_doc:
+        logger.warning(f"[file_text] not found: {file_id}")
+        return Response(status_code=404)
+
+    text = file_doc.get("text", "")
+    filename = file_doc.get("filename", file_id)
+    logger.info(f"[file_text] found text file {file_id}, text_len={len(text)}")
+    return JSONResponse(content={"text": text, "filename": filename})
 
 
 @app.get("/files/download/{file_id}")
@@ -459,6 +498,11 @@ async def file_download(request: Request, file_id: str):
 
         # Prefer the stored MIME type; fall back to S3 content type
         ct = file_type if file_type else content_type
+        # text/plain stored as image — fix MIME type from extension
+        if ct == "text/plain" and filename:
+            forced = _image_ext_to_media_type(filename)
+            if forced:
+                ct = forced
         return Response(
             content=body,
             media_type=ct,
@@ -488,6 +532,13 @@ async def file_preview(request: Request, file_id: str):
         except Exception as e:
             logger.error(f"[file_preview] S3 fetch failed for {file_id}: {e}")
             return Response(status_code=502)
+
+        filename = file_doc.get("filename", "")
+        # text/plain stored as image — fix MIME type from extension
+        if content_type == "text/plain" and filename:
+            forced = _image_ext_to_media_type(filename)
+            if forced:
+                content_type = forced
 
         ct = file_type if file_type else content_type
         return Response(

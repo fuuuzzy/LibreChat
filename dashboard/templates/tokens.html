@@ -65,10 +65,7 @@
 
     <!-- Date filter -->
     <form id="token-filter-form" class="bento-card rounded-xl p-4 mb-5 fade-in fade-in-1"
-          hx-get="/tokens/table"
-          hx-target="#token-table-area"
-          hx-swap="innerHTML"
-          hx-trigger="submit">
+          onsubmit="return refreshTokenPanels(this)">
       <!-- Quick date buttons -->
       <div class="flex items-center gap-1.5 mb-3">
         <span class="text-[10px] font-mono text-surface-500 tracking-wider uppercase mr-1">快捷：</span>
@@ -106,56 +103,29 @@
 
     <!-- User tab -->
     <div id="panel-user" class="{% if tab != 'user' %}hidden{% endif %}">
-      <div id="token-table-area">
+      <div id="token-table-area" class="htmx-loading-overlay">
         {% include "partials/token_table.html" %}
       </div>
     </div>
 
     <!-- Model tab -->
     <div id="panel-model" class="{% if tab != 'model' %}hidden{% endif %}">
-      <div class="bento-card rounded-xl overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="text-[10px] font-mono text-surface-400 uppercase tracking-wider">
-              <th class="text-left px-4 py-2.5 font-medium">模型</th>
-              <th class="text-right px-4 py-2.5 font-medium">输入 Token</th>
-              <th class="text-right px-4 py-2.5 font-medium">输出 Token</th>
-              <th class="text-right px-4 py-2.5 font-medium">合计</th>
-              <th class="text-right px-4 py-2.5 font-medium">调用数</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for m in by_model.records %}
-            <tr class="border-t border-surface-100/60">
-              <td class="px-4 py-2.5 font-medium text-surface-800 font-mono text-xs">{{ m._id or '未知' }}</td>
-              <td class="px-4 py-2.5 text-right font-mono text-gold-500 text-xs">{{ "{:,}".format(m.promptTokens | default(0)) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono text-gold-600 text-xs">{{ "{:,}".format(m.completionTokens | default(0)) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono text-xs text-surface-700">{{ "{:,}".format((m.promptTokens + m.completionTokens) | default(0)) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono text-xs text-surface-500">{{ "{:,}".format(m.count | default(0)) }}</td>
-            </tr>
-            {% endfor %}
-            {% if not by_model.records %}
-            <tr><td colspan="5" class="text-center py-8 text-surface-400 font-mono text-sm">暂无数据</td></tr>
-            {% endif %}
-          </tbody>
-          {% if by_model.records %}
-          <tfoot>
-            <tr class="border-t-2 border-surface-300/60 bg-surface-50/80">
-              <td class="px-4 py-2.5 text-surface-800 font-mono text-xs font-semibold">合计</td>
-              <td class="px-4 py-2.5 text-right font-mono text-gold-500 text-xs font-semibold">{{ "{:,}".format(by_model.grand_prompt) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono text-gold-600 text-xs font-semibold">{{ "{:,}".format(by_model.grand_completion) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono text-xs text-surface-700 font-semibold">{{ "{:,}".format(by_model.grand_prompt + by_model.grand_completion) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono text-xs text-surface-500 font-semibold">{{ "{:,}".format(by_model.grand_count) }}</td>
-            </tr>
-          </tfoot>
-          {% endif %}
-        </table>
+      <div id="model-table-area" class="htmx-loading-overlay">
+        {% include "partials/model_table.html" %}
       </div>
     </div>
   </main>
 </div>
 
 <script>
+function refreshTokenPanels(form) {
+  const params = new URLSearchParams(new FormData(form));
+  const qs = params.toString();
+  htmx.ajax('GET', '/tokens/table?' + qs, {target: '#token-table-area', swap: 'innerHTML'});
+  htmx.ajax('GET', '/tokens/model-table?' + qs, {target: '#model-table-area', swap: 'innerHTML'});
+  return false;
+}
+
 function switchTab(tab) {
   document.getElementById('panel-user').classList.toggle('hidden', tab !== 'user');
   document.getElementById('panel-model').classList.toggle('hidden', tab !== 'model');
@@ -200,7 +170,7 @@ function setTokenDateRange(range) {
   event.target.classList.add('bg-gold-400/10', 'text-gold-700', 'border-gold-400/40');
   event.target.classList.remove('text-surface-500', 'border-surface-200/60');
 
-  form.querySelector('button[type="submit"]').click();
+  refreshTokenPanels(form);
 }
 </script>
 {% endblock %}

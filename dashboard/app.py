@@ -225,6 +225,24 @@ async def token_table_partial(
     })
 
 
+# HTMX partial: model table
+@app.get("/tokens/model-table", response_class=HTMLResponse)
+async def token_model_table_partial(
+    request: Request,
+    start: str = Query(None),
+    end: str = Query(None),
+):
+    if not _check_auth(request):
+        return HTMLResponse("Unauthorized", status_code=401)
+
+    start, end = _resolve_dates(start, end)
+    q_start, q_end = _date_str_to_utc_range(start, end)
+    by_model = await queries.get_token_by_model_detail(q_start, q_end)
+    return templates.TemplateResponse(request=request, name="partials/model_table.html", context={
+        "by_model": by_model,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Usage records (detailed transaction log)
 # ---------------------------------------------------------------------------

@@ -312,9 +312,84 @@
       z-index: 10;
       position: relative;
     }
+
+    /* Global HTMX loading bar */
+    .htmx-loading-bar {
+      position: fixed;
+      top: 0; left: 0;
+      width: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #fbbf24, #f59e0b, #d97706);
+      z-index: 9999;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 8px rgba(251,191,36,0.5);
+    }
+    .htmx-loading-bar.active {
+      width: 90%;
+      animation: loadingPulse 1.5s ease-in-out infinite;
+    }
+    .htmx-loading-bar.done {
+      width: 100%;
+      transition: width 0.2s ease;
+    }
+    @keyframes loadingPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Per-element HTMX indicator (spinner) */
+    .htmx-indicator {
+      display: none;
+    }
+    .htmx-request .htmx-indicator,
+    .htmx-request.htmx-indicator {
+      display: inline-flex;
+    }
+    .htmx-request .htmx-hide-on-request {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* Inline spinner */
+    .spinner-sm {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(251,191,36,0.25);
+      border-top-color: #f59e0b;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Target area loading overlay */
+    .htmx-loading-overlay {
+      position: relative;
+    }
+    .htmx-loading-overlay::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.6);
+      backdrop-filter: blur(2px);
+      border-radius: inherit;
+      z-index: 10;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .htmx-loading-overlay.htmx-loading::after {
+      opacity: 1;
+      animation: overlayShimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes overlayShimmer {
+      0%, 100% { background: rgba(255,255,255,0.5); }
+      50% { background: rgba(255,255,255,0.7); }
+    }
   </style>
 </head>
 <body class="min-h-screen bg-glass-bg bg-dot-pattern text-surface-800">
+  <div id="htmx-loading-bar" class="htmx-loading-bar"></div>
   {% block body %}
   {% endblock %}
 
@@ -350,6 +425,51 @@
         if (!isNaN(target)) animateCount(el, target);
       });
     });
+
+    // Global HTMX loading bar + target loading overlay
+    (function() {
+      const bar = document.getElementById('htmx-loading-bar');
+      let activeRequests = 0;
+
+      function showBar() {
+        bar.classList.remove('done');
+        bar.classList.add('active');
+      }
+      function hideBar(error) {
+        bar.classList.remove('active');
+        bar.classList.add('done');
+        if (error) bar.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)';
+        setTimeout(() => {
+          bar.classList.remove('done');
+          bar.style.width = '0';
+          bar.style.background = '';
+        }, error ? 500 : 300);
+      }
+
+      document.body.addEventListener('htmx:beforeRequest', function(e) {
+        activeRequests++;
+        showBar();
+        var target = e.detail.target || e.detail.elt;
+        if (target) target.classList.add('htmx-loading');
+      });
+
+      document.body.addEventListener('htmx:afterOnLoad', function(e) {
+        var target = e.detail.target || e.detail.elt;
+        if (target) target.classList.remove('htmx-loading');
+      });
+
+      document.body.addEventListener('htmx:afterRequest', function() {
+        activeRequests = Math.max(0, activeRequests - 1);
+        if (activeRequests === 0) hideBar(false);
+      });
+
+      document.body.addEventListener('htmx:sendError', function(e) {
+        var target = e.detail.target || e.detail.elt;
+        if (target) target.classList.remove('htmx-loading');
+        activeRequests = Math.max(0, activeRequests - 1);
+        if (activeRequests === 0) hideBar(true);
+      });
+    })();
   </script>
 </body>
 </html>

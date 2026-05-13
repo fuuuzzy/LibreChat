@@ -876,6 +876,40 @@ async def get_usage_records(
             "as": "userInfo",
         }},
         {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
+        # Lookup preceding user message to calculate API call duration
+        {"$lookup": {
+            "from": "messages",
+            "let": {"cid": "$conversationId", "uid": {"$toString": "$user"}, "txTime": "$createdAt"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$conversationId", "$$cid"]},
+                    {"$eq": ["$user", "$$uid"]},
+                    {"$eq": ["$isCreatedByUser", True]},
+                    {"$lt": ["$createdAt", "$$txTime"]},
+                ]}}},
+                {"$sort": {"createdAt": -1}},
+                {"$limit": 1},
+                {"$project": {"createdAt": 1}},
+            ],
+            "as": "userMsg",
+        }},
+        {"$unwind": {"path": "$userMsg", "preserveNullAndEmptyArrays": True}},
+        {"$addFields": {
+            "duration": {
+                "$cond": [
+                    {"$and": ["$userMsg.createdAt", "$createdAt"]},
+                    {"$round": [
+                        {"$divide": [
+                            {"$subtract": ["$createdAt", "$userMsg.createdAt"]},
+                            1000,
+                        ]},
+                        1,
+                    ]},
+                    None
+                ]
+            },
+        }},
+        {"$project": {"userMsg": 0}},
         {"$sort": {"createdAt": -1}},
         {"$skip": (page - 1) * page_size},
         {"$limit": page_size},
@@ -959,6 +993,7 @@ async def get_usage_records_for_export(
             "user": {"$first": "$user"},
             "model": {"$first": "$model"},
             "createdAt": {"$first": "$createdAt"},
+            "conversationId": {"$first": "$conversationId"},
             "context": {"$first": "$context"},
             "promptTokens": {
                 "$sum": {
@@ -1016,6 +1051,40 @@ async def get_usage_records_for_export(
             "as": "userInfo",
         }},
         {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
+        # Lookup preceding user message to calculate API call duration
+        {"$lookup": {
+            "from": "messages",
+            "let": {"cid": "$conversationId", "uid": {"$toString": "$user"}, "txTime": "$createdAt"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and": [
+                    {"$eq": ["$conversationId", "$$cid"]},
+                    {"$eq": ["$user", "$$uid"]},
+                    {"$eq": ["$isCreatedByUser", True]},
+                    {"$lt": ["$createdAt", "$$txTime"]},
+                ]}}},
+                {"$sort": {"createdAt": -1}},
+                {"$limit": 1},
+                {"$project": {"createdAt": 1}},
+            ],
+            "as": "userMsg",
+        }},
+        {"$unwind": {"path": "$userMsg", "preserveNullAndEmptyArrays": True}},
+        {"$addFields": {
+            "duration": {
+                "$cond": [
+                    {"$and": ["$userMsg.createdAt", "$createdAt"]},
+                    {"$round": [
+                        {"$divide": [
+                            {"$subtract": ["$createdAt", "$userMsg.createdAt"]},
+                            1000,
+                        ]},
+                        1,
+                    ]},
+                    None
+                ]
+            },
+        }},
+        {"$project": {"userMsg": 0, "conversationId": 0}},
         {"$sort": {"createdAt": -1}},
     ]
 

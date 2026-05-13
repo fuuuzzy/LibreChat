@@ -126,13 +126,14 @@ def export_usage_records(records: list[dict]) -> io.BytesIO:
 
     headers = [
         "时间", "用户", "邮箱", "模型", "来源", "输入Token", "输出Token",
-        "缓存写入Token", "缓存读取Token",
+        "缓存写入Token", "缓存读取Token", "用时(秒)",
     ]
     ws.append(headers)
     _style_header(ws, len(headers))
 
     for rec in records:
         user_info = rec.get("userInfo") or {}
+        duration = rec.get("duration")
         ws.append([
             _to_utc8(rec.get("createdAt")),
             user_info.get("name", ""),
@@ -143,6 +144,7 @@ def export_usage_records(records: list[dict]) -> io.BytesIO:
             rec.get("completionTokens", 0),
             rec.get("writeTokens", 0),
             rec.get("readTokens", 0),
+            duration if duration and duration > 0 else "",
         ])
 
     _auto_width(ws)

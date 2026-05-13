@@ -9,6 +9,7 @@
         <th class="text-left">来源</th>
         <th class="text-right">输入 Token</th>
         <th class="text-right">输出 Token</th>
+        <th class="text-right">用时(秒)</th>
       </tr>
     </thead>
     <tbody>
@@ -42,10 +43,17 @@
         <td class="text-right font-mono text-gold-600 text-xs">
           {{ "{:,}".format(item.completionTokens | default(0)) }}
         </td>
+        <td class="text-right font-mono text-xs text-surface-600">
+          {% if item.duration is not none and item.duration > 0 %}
+            {{ item.duration }}
+          {% else %}
+            -
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
       {% if not records.records %}
-      <tr><td colspan="6" class="text-center py-8 text-surface-400 font-mono text-sm">暂无数据</td></tr>
+      <tr><td colspan="8" class="text-center py-8 text-surface-400 font-mono text-sm">暂无数据</td></tr>
       {% endif %}
     </tbody>
   </table>

@@ -783,18 +783,12 @@ async def get_usage_records(
     db = get_db()
     match_stage: dict = {}
 
-    # Date range filter
     if start_date:
         match_stage.setdefault("createdAt", {})["$gte"] = datetime.fromisoformat(start_date)
     if end_date:
-        end_dt = datetime.fromisoformat(end_date)
-        match_stage.setdefault("createdAt", {})["$lte"] = end_dt
-
-    # User filter
+        match_stage.setdefault("createdAt", {})["$lte"] = datetime.fromisoformat(end_date)
     if user_id:
         match_stage["user"] = ObjectId(user_id)
-
-    # Model filter (exact match)
     if model:
         match_stage["model"] = model
 
@@ -857,67 +851,44 @@ async def get_usage_records(
                 }
             },
         }},
-    ]
-
-    # Count total for pagination
-    count_pipeline = pipeline + [{"$count": "total"}]
-    count_result = await db.transactions.aggregate(count_pipeline).to_list(1)
-    total = count_result[0]["total"] if count_result else 0
-
-    # Continue with user lookup and pagination
-    pipeline += [
-        {"$lookup": {
-            "from": "users",
-            "let": {"uid": "$user"},
-            "pipeline": [
-                {"$match": {"$expr": {"$eq": ["$_id", "$$uid"]}}},
-                {"$project": {"name": 1, "email": 1, "username": 1}},
-            ],
-            "as": "userInfo",
-        }},
-        {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
-        # Lookup preceding user message to calculate API call duration
-        {"$lookup": {
-            "from": "messages",
-            "let": {"cid": "$conversationId", "uid": {"$toString": "$user"}, "txTime": "$createdAt"},
-            "pipeline": [
-                {"$match": {"$expr": {"$and": [
-                    {"$eq": ["$conversationId", "$$cid"]},
-                    {"$eq": ["$user", "$$uid"]},
-                    {"$eq": ["$isCreatedByUser", True]},
-                    {"$lt": ["$createdAt", "$$txTime"]},
-                ]}}},
+        # $facet: count + paginated data in a single pass
+        {"$facet": {
+            "metadata": [{"$count": "total"}],
+            "records": [
+                {"$lookup": {
+                    "from": "users",
+                    "let": {"uid": "$user"},
+                    "pipeline": [
+                        {"$match": {"$expr": {"$eq": ["$_id", "$$uid"]}}},
+                        {"$project": {"name": 1, "email": 1, "username": 1}},
+                    ],
+                    "as": "userInfo",
+                }},
+                {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
                 {"$sort": {"createdAt": -1}},
-                {"$limit": 1},
-                {"$project": {"createdAt": 1}},
+                {"$skip": (page - 1) * page_size},
+                {"$limit": page_size},
             ],
-            "as": "userMsg",
         }},
-        {"$unwind": {"path": "$userMsg", "preserveNullAndEmptyArrays": True}},
-        {"$addFields": {
-            "duration": {
-                "$cond": [
-                    {"$and": ["$userMsg.createdAt", "$createdAt"]},
-                    {"$round": [
-                        {"$divide": [
-                            {"$subtract": ["$createdAt", "$userMsg.createdAt"]},
-                            1000,
-                        ]},
-                        1,
-                    ]},
-                    None
-                ]
-            },
+        {"$project": {
+            "total": {"$ifNull": [{"$arrayElemAt": ["$metadata.total", 0]}, 0]},
+            "records": 1,
         }},
-        {"$project": {"userMsg": 0}},
-        {"$sort": {"createdAt": -1}},
-        {"$skip": (page - 1) * page_size},
-        {"$limit": page_size},
     ]
 
-    records = await db.transactions.aggregate(pipeline).to_list(page_size)
+    facet_result = await db.transactions.aggregate(pipeline).to_list(1)
+    if not facet_result:
+        return {
+            "records": [], "total": 0, "page": page,
+            "page_size": page_size, "total_pages": 0,
+        }
 
-    # Convert to int
+    total = int(facet_result[0].get("total", 0))
+    records = facet_result[0].get("records", [])
+
+    # Batch-fetch duration: preceding user message per (conversationId, user)
+    await _enrich_duration(db, records)
+
     for r in records:
         r["promptTokens"] = int(r.get("promptTokens", 0))
         r["completionTokens"] = int(r.get("completionTokens", 0))
@@ -932,6 +903,72 @@ async def get_usage_records(
         "page_size": page_size,
         "total_pages": (total + page_size - 1) // page_size,
     }
+
+
+async def _enrich_duration(db, records: list[dict]) -> None:
+    """Batch-compute API duration for a page of records.
+
+    Instead of a per-record $lookup into messages, this does batch
+    queries per unique (conversationId, user) pair, then matches
+    in Python with binary search.
+    """
+    if not records:
+        return
+
+    from bisect import bisect_left
+
+    # Collect unique (conversationId, user_str) pairs
+    pairs: set[tuple[str, str]] = set()
+    for r in records:
+        cid = r.get("conversationId")
+        uid = r.get("user")
+        if cid and uid:
+            pairs.add((cid, str(uid)))
+
+    if not pairs:
+        return
+
+    # Chunk the $or query to avoid oversized BSON documents (16MB limit)
+    CHUNK = 500
+    pair_list = list(pairs)
+    # timestamps sorted ascending per pair
+    msg_map: dict[tuple[str, str], list[datetime]] = {}
+
+    for i in range(0, len(pair_list), CHUNK):
+        chunk = pair_list[i : i + CHUNK]
+        or_conditions = [
+            {"conversationId": cid, "user": uid, "isCreatedByUser": True}
+            for cid, uid in chunk
+        ]
+        cursor = db.messages.find(
+            {"$or": or_conditions},
+            {"conversationId": 1, "user": 1, "createdAt": 1},
+        ).sort("createdAt", 1)
+        async for msg in cursor:
+            key = (msg["conversationId"], msg["user"])
+            msg_map.setdefault(key, []).append(msg["createdAt"])
+
+    # For each record, binary-search for the preceding user message
+    for r in records:
+        cid = r.get("conversationId")
+        uid = r.get("user")
+        tx_time = r.get("createdAt")
+        if not (cid and uid and tx_time):
+            r["duration"] = None
+            continue
+
+        timestamps = msg_map.get((cid, str(uid)))
+        if not timestamps:
+            r["duration"] = None
+            continue
+
+        # timestamps ascending; find rightmost ts < tx_time
+        idx = bisect_left(timestamps, tx_time)
+        if idx > 0:
+            delta = tx_time - timestamps[idx - 1]
+            r["duration"] = round(delta.total_seconds(), 1)
+        else:
+            r["duration"] = None
 
 
 async def get_distinct_models() -> list[str]:
@@ -974,12 +1011,9 @@ async def get_usage_records_for_export(
     if start_date:
         match_stage.setdefault("createdAt", {})["$gte"] = datetime.fromisoformat(start_date)
     if end_date:
-        end_dt = datetime.fromisoformat(end_date)
-        match_stage.setdefault("createdAt", {})["$lte"] = end_dt
-
+        match_stage.setdefault("createdAt", {})["$lte"] = datetime.fromisoformat(end_date)
     if user_id:
         match_stage["user"] = ObjectId(user_id)
-
     if model:
         match_stage["model"] = model
 
@@ -1051,44 +1085,13 @@ async def get_usage_records_for_export(
             "as": "userInfo",
         }},
         {"$unwind": {"path": "$userInfo", "preserveNullAndEmptyArrays": True}},
-        # Lookup preceding user message to calculate API call duration
-        {"$lookup": {
-            "from": "messages",
-            "let": {"cid": "$conversationId", "uid": {"$toString": "$user"}, "txTime": "$createdAt"},
-            "pipeline": [
-                {"$match": {"$expr": {"$and": [
-                    {"$eq": ["$conversationId", "$$cid"]},
-                    {"$eq": ["$user", "$$uid"]},
-                    {"$eq": ["$isCreatedByUser", True]},
-                    {"$lt": ["$createdAt", "$$txTime"]},
-                ]}}},
-                {"$sort": {"createdAt": -1}},
-                {"$limit": 1},
-                {"$project": {"createdAt": 1}},
-            ],
-            "as": "userMsg",
-        }},
-        {"$unwind": {"path": "$userMsg", "preserveNullAndEmptyArrays": True}},
-        {"$addFields": {
-            "duration": {
-                "$cond": [
-                    {"$and": ["$userMsg.createdAt", "$createdAt"]},
-                    {"$round": [
-                        {"$divide": [
-                            {"$subtract": ["$createdAt", "$userMsg.createdAt"]},
-                            1000,
-                        ]},
-                        1,
-                    ]},
-                    None
-                ]
-            },
-        }},
-        {"$project": {"userMsg": 0, "conversationId": 0}},
         {"$sort": {"createdAt": -1}},
     ]
 
     records = await db.transactions.aggregate(pipeline).to_list(50000)
+
+    # Batch-compute duration instead of per-record $lookup to messages
+    await _enrich_duration(db, records)
 
     for r in records:
         r["promptTokens"] = int(r.get("promptTokens", 0))
